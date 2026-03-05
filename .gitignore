@@ -1,0 +1,12 @@
+#python env/cache
+python_env/
+__pycache__/
+#Server log
+logs/
+#test scripts
+test/
+#vscode settings
+.vscode/
+#claude config
+.claude/
+

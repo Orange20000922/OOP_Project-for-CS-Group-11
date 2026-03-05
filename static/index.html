@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>课表管理系统</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f5f5; color: #333; }
+
+    header {
+      background: #c0392b;
+      color: #fff;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 1.2rem; font-weight: 600; }
+    header span { font-size: 0.9rem; opacity: 0.85; }
+
+    .container { max-width: 960px; margin: 32px auto; padding: 0 16px; }
+
+    /* 登录面板 */
+    #view-login { display: block; }
+    #view-schedule { display: none; }
+
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.1);
+      padding: 32px;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .card h2 { margin-bottom: 20px; font-size: 1.1rem; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 0.85rem; margin-bottom: 6px; color: #555; }
+    .form-group input {
+      width: 100%; padding: 9px 12px;
+      border: 1px solid #ddd; border-radius: 6px;
+      font-size: 0.95rem; outline: none;
+    }
+    .form-group input:focus { border-color: #c0392b; }
+
+    .btn {
+      display: inline-block; padding: 10px 20px;
+      background: #c0392b; color: #fff;
+      border: none; border-radius: 6px;
+      cursor: pointer; font-size: 0.95rem; width: 100%;
+    }
+    .btn:hover { background: #a93226; }
+    .btn-secondary {
+      background: #fff; color: #c0392b;
+      border: 1px solid #c0392b; margin-top: 8px;
+    }
+    .btn-secondary:hover { background: #fdf0f0; }
+
+    .msg { margin-top: 12px; font-size: 0.85rem; color: #c0392b; min-height: 18px; }
+
+    /* 课表视图 */
+    .toolbar {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 16px;
+    }
+    .toolbar h2 { flex: 1; font-size: 1rem; }
+
+    .now-card {
+      background: #fff; border-left: 4px solid #c0392b;
+      border-radius: 6px; padding: 12px 16px;
+      margin-bottom: 16px; font-size: 0.9rem;
+    }
+    .now-card strong { font-size: 1rem; }
+
+    .timetable {
+      background: #fff; border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      overflow: hidden; width: 100%;
+      border-collapse: collapse;
+    }
+    .timetable th, .timetable td {
+      border: 1px solid #eee; text-align: center;
+      padding: 6px 4px; font-size: 0.78rem; vertical-align: top;
+    }
+    .timetable th { background: #f9f9f9; font-weight: 600; }
+    .timetable .period-label { color: #888; font-size: 0.72rem; width: 52px; }
+    .course-cell {
+      background: #fdecea; border-radius: 4px;
+      padding: 4px; line-height: 1.4;
+    }
+    .course-cell .name { font-weight: 600; color: #c0392b; }
+    .course-cell .info { color: #666; font-size: 0.7rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>课表管理系统</h1>
+  <span id="header-user"></span>
+</header>
+
+<!-- 登录/注册视图 -->
+<div class="container" id="view-login">
+  <div class="card">
+    <h2 id="form-title">登录</h2>
+    <div id="field-name" class="form-group" style="display:none">
+      <label>姓名</label>
+      <input type="text" id="input-name" placeholder="真实姓名" />
+    </div>
+    <div class="form-group">
+      <label>学号</label>
+      <input type="text" id="input-sid" placeholder="请输入学号" />
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" id="input-pwd" placeholder="请输入密码" />
+    </div>
+    <button class="btn" id="btn-submit">登录</button>
+    <button class="btn btn-secondary" id="btn-toggle">没有账号？去注册</button>
+    <div class="msg" id="msg-login"></div>
+  </div>
+</div>
+
+<!-- 课表视图 -->
+<div class="container" id="view-schedule">
+  <div class="now-card" id="now-card">
+    当前没有课
+  </div>
+  <div class="toolbar">
+    <button class="btn btn-secondary" id="btn-prev-week" style="width:auto;padding:6px 14px">&#8592; 上周</button>
+    <h2 id="week-label">本周课表</h2>
+    <button class="btn btn-secondary" id="btn-next-week" style="width:auto;padding:6px 14px">下周 &#8594;</button>
+    <button class="btn" id="btn-fetch" style="width:auto;padding:6px 14px">从教务系统获取</button>
+    <button class="btn btn-secondary" id="btn-logout" style="width:auto;padding:6px 14px">退出</button>
+  </div>
+  <table class="timetable" id="timetable">
+    <thead>
+      <tr>
+        <th class="period-label">节次</th>
+        <th>周一</th><th>周二</th><th>周三</th>
+        <th>周四</th><th>周五</th><th>周六</th><th>周日</th>
+      </tr>
+    </thead>
+    <tbody id="timetable-body"></tbody>
+  </table>
+</div>
+
+<script>
+const API = '';  // 同源，无需前缀
+let isRegister = false;
+let weekOffset = 0;
+
+// ---- 登录/注册切换 ----
+document.getElementById('btn-toggle').onclick = () => {
+  isRegister = !isRegister;
+  document.getElementById('form-title').textContent = isRegister ? '注册' : '登录';
+  document.getElementById('field-name').style.display = isRegister ? '' : 'none';
+  document.getElementById('btn-submit').textContent = isRegister ? '注册' : '登录';
+  document.getElementById('btn-toggle').textContent = isRegister ? '已有账号？去登录' : '没有账号？去注册';
+  document.getElementById('msg-login').textContent = '';
+};
+
+document.getElementById('btn-submit').onclick = async () => {
+  const sid = document.getElementById('input-sid').value.trim();
+  const pwd = document.getElementById('input-pwd').value;
+  const name = document.getElementById('input-name').value.trim();
+  const msg = document.getElementById('msg-login');
+
+  if (!sid || !pwd) { msg.textContent = '请填写学号和密码'; return; }
+
+  if (isRegister) {
+    if (!name) { msg.textContent = '请填写姓名'; return; }
+    const r = await fetch(`${API}/auth/register`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ student_id: sid, name, password: pwd })
+    });
+    if (r.ok) { msg.style.color = 'green'; msg.textContent = '注册成功，请登录'; isRegister = false; document.getElementById('btn-toggle').click(); }
+    else { const e = await r.json(); msg.style.color = '#c0392b'; msg.textContent = e.detail || '注册失败'; }
+  } else {
+    const r = await fetch(`${API}/auth/login`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      credentials: 'include',
+      body: JSON.stringify({ student_id: sid, password: pwd })
+    });
+    if (r.ok) { enterScheduleView(); }
+    else { const e = await r.json(); msg.style.color = '#c0392b'; msg.textContent = e.detail || '登录失败'; }
+  }
+};
+
+// ---- 课表视图 ----
+async function enterScheduleView() {
+  const r = await fetch(`${API}/auth/me`, { credentials: 'include' });
+  if (!r.ok) return;
+  const user = await r.json();
+  document.getElementById('header-user').textContent = `${user.name}（${user.student_id}）`;
+  document.getElementById('view-login').style.display = 'none';
+  document.getElementById('view-schedule').style.display = 'block';
+  weekOffset = 0;
+  loadWeek();
+  loadNow();
+}
+
+async function loadWeek() {
+  document.getElementById('week-label').textContent = weekOffset === 0 ? '本周课表' : (weekOffset > 0 ? `+${weekOffset}周` : `${weekOffset}周`);
+  const path = weekOffset === 0 ? '/query/week' : `/query/week/${weekOffset}`;
+  const r = await fetch(`${API}${path}`, { credentials: 'include' });
+  if (!r.ok) { renderEmptyTable(); return; }
+  const data = await r.json();  // { "1": [Course...], ... }
+  renderTable(data);
+}
+
+async function loadNow() {
+  const r = await fetch(`${API}/query/now`, { credentials: 'include' });
+  const card = document.getElementById('now-card');
+  if (r.ok) {
+    const c = await r.json();
+    if (c) card.innerHTML = `现在：<strong>${c.name}</strong> &nbsp;|&nbsp; ${c.teacher} &nbsp;|&nbsp; ${c.location}`;
+    else card.textContent = '当前没有课';
+  } else { card.textContent = '当前没有课'; }
+}
+
+function renderTable(data) {
+  const PERIODS = 12;
+  const body = document.getElementById('timetable-body');
+  body.innerHTML = '';
+  for (let p = 1; p <= PERIODS; p++) {
+    const tr = document.createElement('tr');
+    const td0 = document.createElement('td');
+    td0.className = 'period-label';
+    td0.textContent = `第${p}节`;
+    tr.appendChild(td0);
+    for (let d = 1; d <= 7; d++) {
+      const td = document.createElement('td');
+      const courses = (data[String(d)] || []).filter(c => c.period_start <= p && c.period_end >= p);
+      if (courses.length > 0 && courses[0].period_start === p) {
+        const c = courses[0];
+        const span = c.period_end - c.period_start + 1;
+        td.rowSpan = span;
+        td.innerHTML = `<div class="course-cell"><div class="name">${c.name}</div><div class="info">${c.teacher}<br>${c.location}</div></div>`;
+        tr.appendChild(td);
+      } else if (courses.length === 0) {
+        tr.appendChild(td);
+      }
+      // 若 period_start < p（合并行的后续格）则跳过
+    }
+    body.appendChild(tr);
+  }
+}
+
+function renderEmptyTable() {
+  const body = document.getElementById('timetable-body');
+  body.innerHTML = '';
+  for (let p = 1; p <= 12; p++) {
+    const tr = document.createElement('tr');
+    const td0 = document.createElement('td'); td0.className = 'period-label'; td0.textContent = `第${p}节`;
+    tr.appendChild(td0);
+    for (let d = 0; d < 7; d++) tr.appendChild(document.createElement('td'));
+    body.appendChild(tr);
+  }
+}
+
+document.getElementById('btn-prev-week').onclick = () => { weekOffset--; loadWeek(); };
+document.getElementById('btn-next-week').onclick = () => { weekOffset++; loadWeek(); };
+
+document.getElementById('btn-logout').onclick = async () => {
+  await fetch(`${API}/auth/logout`, { method: 'POST', credentials: 'include' });
+  document.getElementById('view-schedule').style.display = 'none';
+  document.getElementById('view-login').style.display = 'block';
+  document.getElementById('header-user').textContent = '';
+};
+
+document.getElementById('btn-fetch').onclick = async () => {
+  const pwd = prompt('请输入华南师大教务系统密码（用于自动抓取课表）：');
+  if (!pwd) return;
+  const r = await fetch(`${API}/schedule/fetch`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    credentials: 'include', body: JSON.stringify({ scnu_password: pwd })
+  });
+  alert(r.ok ? '抓取任务已提交，请稍后刷新课表' : '提交失败，请检查密码或稍后重试');
+};
+
+// 页面加载时检查登录态
+(async () => {
+  const r = await fetch(`${API}/auth/me`, { credentials: 'include' });
+  if (r.ok) enterScheduleView();
+})();
+</script>
+</body>
+</html>
