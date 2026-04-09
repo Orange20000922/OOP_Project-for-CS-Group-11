@@ -5,3 +5,5 @@ requests
 pdfplumber
 python-multipart
 passlib[bcrypt]
+rsa
+playwright
