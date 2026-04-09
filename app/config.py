@@ -1,13 +1,16 @@
 from pathlib import Path
 
-BASE_DIR = Path(__file__).parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 SCHEDULES_DIR = DATA_DIR / "schedules"
 USERS_FILE = DATA_DIR / "users.json"
 STATIC_DIR = BASE_DIR / "static"
 
 SESSION_COOKIE_NAME = "session_token"
-SESSION_EXPIRE_SECONDS = 7 * 24 * 3600  # 7 天
+SESSION_EXPIRE_SECONDS = 7 * 24 * 3600
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "lax"
+SESSION_COOKIE_SECURE = False
 
 # 节次时间表（需根据华南师范大学实际作息核实）
 # 格式: period -> (开始时间, 结束时间)
@@ -28,3 +31,6 @@ PERIOD_TIMES: dict[int, tuple[str, str]] = {
 
 # 强智教务系统
 SCNU_JWXT_BASE = "https://jwxt.scnu.edu.cn"
+SCNU_LOGIN_PATH = "/xtgl/login_slogin.html"
+SCNU_PUBLIC_KEY_PATH = "/xtgl/login_getPublicKey.html"
+SCNU_SCHEDULE_QUERY_PATH = "/kbcx/xskbcx_cxXsgrkb.html"
