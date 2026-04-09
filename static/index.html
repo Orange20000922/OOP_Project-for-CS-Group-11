@@ -3,288 +3,227 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>课表管理系统</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f5f5; color: #333; }
-
-    header {
-      background: #c0392b;
-      color: #fff;
-      padding: 16px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    header h1 { font-size: 1.2rem; font-weight: 600; }
-    header span { font-size: 0.9rem; opacity: 0.85; }
-
-    .container { max-width: 960px; margin: 32px auto; padding: 0 16px; }
-
-    /* 登录面板 */
-    #view-login { display: block; }
-    #view-schedule { display: none; }
-
-    .card {
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 1px 4px rgba(0,0,0,.1);
-      padding: 32px;
-      max-width: 400px;
-      margin: 0 auto;
-    }
-    .card h2 { margin-bottom: 20px; font-size: 1.1rem; }
-
-    .form-group { margin-bottom: 16px; }
-    .form-group label { display: block; font-size: 0.85rem; margin-bottom: 6px; color: #555; }
-    .form-group input {
-      width: 100%; padding: 9px 12px;
-      border: 1px solid #ddd; border-radius: 6px;
-      font-size: 0.95rem; outline: none;
-    }
-    .form-group input:focus { border-color: #c0392b; }
-
-    .btn {
-      display: inline-block; padding: 10px 20px;
-      background: #c0392b; color: #fff;
-      border: none; border-radius: 6px;
-      cursor: pointer; font-size: 0.95rem; width: 100%;
-    }
-    .btn:hover { background: #a93226; }
-    .btn-secondary {
-      background: #fff; color: #c0392b;
-      border: 1px solid #c0392b; margin-top: 8px;
-    }
-    .btn-secondary:hover { background: #fdf0f0; }
-
-    .msg { margin-top: 12px; font-size: 0.85rem; color: #c0392b; min-height: 18px; }
-
-    /* 课表视图 */
-    .toolbar {
-      display: flex; align-items: center; gap: 12px;
-      margin-bottom: 16px;
-    }
-    .toolbar h2 { flex: 1; font-size: 1rem; }
-
-    .now-card {
-      background: #fff; border-left: 4px solid #c0392b;
-      border-radius: 6px; padding: 12px 16px;
-      margin-bottom: 16px; font-size: 0.9rem;
-    }
-    .now-card strong { font-size: 1rem; }
-
-    .timetable {
-      background: #fff; border-radius: 8px;
-      box-shadow: 0 1px 4px rgba(0,0,0,.08);
-      overflow: hidden; width: 100%;
-      border-collapse: collapse;
-    }
-    .timetable th, .timetable td {
-      border: 1px solid #eee; text-align: center;
-      padding: 6px 4px; font-size: 0.78rem; vertical-align: top;
-    }
-    .timetable th { background: #f9f9f9; font-weight: 600; }
-    .timetable .period-label { color: #888; font-size: 0.72rem; width: 52px; }
-    .course-cell {
-      background: #fdecea; border-radius: 4px;
-      padding: 4px; line-height: 1.4;
-    }
-    .course-cell .name { font-weight: 600; color: #c0392b; }
-    .course-cell .info { color: #666; font-size: 0.7rem; }
-  </style>
+  <title>学生课表管理系统</title>
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-
-<header>
-  <h1>课表管理系统</h1>
-  <span id="header-user"></span>
-</header>
-
-<!-- 登录/注册视图 -->
-<div class="container" id="view-login">
-  <div class="card">
-    <h2 id="form-title">登录</h2>
-    <div id="field-name" class="form-group" style="display:none">
-      <label>姓名</label>
-      <input type="text" id="input-name" placeholder="真实姓名" />
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">SCNU Schedule Workspace</p>
+      <h1>学生课表管理系统</h1>
     </div>
-    <div class="form-group">
-      <label>学号</label>
-      <input type="text" id="input-sid" placeholder="请输入学号" />
+    <div class="topbar-meta">
+      <span id="header-user"></span>
+      <button class="button secondary hidden" id="btn-logout" type="button">退出登录</button>
     </div>
-    <div class="form-group">
-      <label>密码</label>
-      <input type="password" id="input-pwd" placeholder="请输入密码" />
-    </div>
-    <button class="btn" id="btn-submit">登录</button>
-    <button class="btn btn-secondary" id="btn-toggle">没有账号？去注册</button>
-    <div class="msg" id="msg-login"></div>
-  </div>
-</div>
+  </header>
 
-<!-- 课表视图 -->
-<div class="container" id="view-schedule">
-  <div class="now-card" id="now-card">
-    当前没有课
-  </div>
-  <div class="toolbar">
-    <button class="btn btn-secondary" id="btn-prev-week" style="width:auto;padding:6px 14px">&#8592; 上周</button>
-    <h2 id="week-label">本周课表</h2>
-    <button class="btn btn-secondary" id="btn-next-week" style="width:auto;padding:6px 14px">下周 &#8594;</button>
-    <button class="btn" id="btn-fetch" style="width:auto;padding:6px 14px">从教务系统获取</button>
-    <button class="btn btn-secondary" id="btn-logout" style="width:auto;padding:6px 14px">退出</button>
-  </div>
-  <table class="timetable" id="timetable">
-    <thead>
-      <tr>
-        <th class="period-label">节次</th>
-        <th>周一</th><th>周二</th><th>周三</th>
-        <th>周四</th><th>周五</th><th>周六</th><th>周日</th>
-      </tr>
-    </thead>
-    <tbody id="timetable-body"></tbody>
-  </table>
-</div>
+  <main class="page">
+    <section class="auth-shell" id="view-auth">
+      <div class="panel auth-panel">
+        <h2 id="auth-title">登录</h2>
+        <p class="subtle">本地账号负责管理课表数据。教务系统账号只在你主动触发抓取时使用。</p>
+        <div class="field-grid">
+          <label class="field hidden" id="field-name">
+            <span>姓名</span>
+            <input id="input-name" placeholder="真实姓名" type="text" />
+          </label>
+          <label class="field hidden" id="field-scnu-account">
+            <span>教务账号（可选）</span>
+            <input id="input-scnu-account" placeholder="默认使用学号" type="text" />
+          </label>
+          <label class="field">
+            <span>学号</span>
+            <input id="input-sid" placeholder="请输入学号" type="text" />
+          </label>
+          <label class="field">
+            <span>密码</span>
+            <input id="input-pwd" placeholder="请输入密码" type="password" />
+          </label>
+        </div>
+        <div class="button-row" style="margin-top: 24px;">
+          <button class="button" id="btn-submit-auth" type="button">登录</button>
+          <button class="button secondary" id="btn-toggle-auth" type="button">没有账号？去注册</button>
+        </div>
+        <div class="message" id="auth-message"></div>
+      </div>
+    </section>
 
-<script>
-const API = '';  // 同源，无需前缀
-let isRegister = false;
-let weekOffset = 0;
+    <section class="app-shell hidden" id="view-app">
+      <div class="status-banner" id="global-message">请先初始化学期信息。</div>
 
-// ---- 登录/注册切换 ----
-document.getElementById('btn-toggle').onclick = () => {
-  isRegister = !isRegister;
-  document.getElementById('form-title').textContent = isRegister ? '注册' : '登录';
-  document.getElementById('field-name').style.display = isRegister ? '' : 'none';
-  document.getElementById('btn-submit').textContent = isRegister ? '注册' : '登录';
-  document.getElementById('btn-toggle').textContent = isRegister ? '已有账号？去登录' : '没有账号？去注册';
-  document.getElementById('msg-login').textContent = '';
-};
+      <div class="layout">
+        <section class="panel workspace stack">
+          <div class="section-header">
+            <div>
+              <h2>课表总览</h2>
+              <p class="subtle">查询本周安排、当前课程，并保留手动维护入口。</p>
+            </div>
+          </div>
 
-document.getElementById('btn-submit').onclick = async () => {
-  const sid = document.getElementById('input-sid').value.trim();
-  const pwd = document.getElementById('input-pwd').value;
-  const name = document.getElementById('input-name').value.trim();
-  const msg = document.getElementById('msg-login');
+          <div class="now-card" id="now-card">当前节次没有课程。</div>
 
-  if (!sid || !pwd) { msg.textContent = '请填写学号和密码'; return; }
+          <div class="toolbar">
+            <div class="button-row">
+              <button class="button secondary" id="btn-prev-week" type="button">上周</button>
+              <button class="button secondary" id="btn-next-week" type="button">下周</button>
+            </div>
+            <h3 class="week-title" id="week-label">本周课表</h3>
+          </div>
 
-  if (isRegister) {
-    if (!name) { msg.textContent = '请填写姓名'; return; }
-    const r = await fetch(`${API}/auth/register`, {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ student_id: sid, name, password: pwd })
-    });
-    if (r.ok) { msg.style.color = 'green'; msg.textContent = '注册成功，请登录'; isRegister = false; document.getElementById('btn-toggle').click(); }
-    else { const e = await r.json(); msg.style.color = '#c0392b'; msg.textContent = e.detail || '注册失败'; }
-  } else {
-    const r = await fetch(`${API}/auth/login`, {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      credentials: 'include',
-      body: JSON.stringify({ student_id: sid, password: pwd })
-    });
-    if (r.ok) { enterScheduleView(); }
-    else { const e = await r.json(); msg.style.color = '#c0392b'; msg.textContent = e.detail || '登录失败'; }
-  }
-};
+          <div class="table-wrap">
+            <table class="timetable">
+              <thead>
+                <tr>
+                  <th class="period-label">节次</th>
+                  <th>周一</th>
+                  <th>周二</th>
+                  <th>周三</th>
+                  <th>周四</th>
+                  <th>周五</th>
+                  <th>周六</th>
+                  <th>周日</th>
+                </tr>
+              </thead>
+              <tbody id="timetable-body"></tbody>
+            </table>
+          </div>
+        </section>
 
-// ---- 课表视图 ----
-async function enterScheduleView() {
-  const r = await fetch(`${API}/auth/me`, { credentials: 'include' });
-  if (!r.ok) return;
-  const user = await r.json();
-  document.getElementById('header-user').textContent = `${user.name}（${user.student_id}）`;
-  document.getElementById('view-login').style.display = 'none';
-  document.getElementById('view-schedule').style.display = 'block';
-  weekOffset = 0;
-  loadWeek();
-  loadNow();
-}
+        <aside class="side-column">
+          <section class="panel workspace stack">
+            <div class="section-header">
+              <h3>学期信息</h3>
+            </div>
+            <div class="inline-grid">
+              <label class="field">
+                <span>学期标识</span>
+                <input id="input-semester" placeholder="如 2025-2026-2" type="text" />
+              </label>
+              <label class="field">
+                <span>开学日期</span>
+                <input id="input-semester-start" type="date" />
+              </label>
+            </div>
+            <div class="button-row">
+              <button class="button" id="btn-save-schedule-meta" type="button">保存学期信息</button>
+            </div>
+          </section>
 
-async function loadWeek() {
-  document.getElementById('week-label').textContent = weekOffset === 0 ? '本周课表' : (weekOffset > 0 ? `+${weekOffset}周` : `${weekOffset}周`);
-  const path = weekOffset === 0 ? '/query/week' : `/query/week/${weekOffset}`;
-  const r = await fetch(`${API}${path}`, { credentials: 'include' });
-  if (!r.ok) { renderEmptyTable(); return; }
-  const data = await r.json();  // { "1": [Course...], ... }
-  renderTable(data);
-}
+          <section class="panel workspace stack">
+            <div class="section-header">
+              <h3>导入文件</h3>
+            </div>
+            <label class="field">
+              <span>JSON 或 PDF 课表</span>
+              <input id="input-upload-file" accept=".json,.pdf" type="file" />
+            </label>
+            <div class="button-row">
+              <button class="button" id="btn-upload" type="button">上传并覆盖当前课表</button>
+            </div>
+            <p class="helper">JSON 优先可用；PDF 走回退解析路径，格式变化时可能失败。</p>
+          </section>
 
-async function loadNow() {
-  const r = await fetch(`${API}/query/now`, { credentials: 'include' });
-  const card = document.getElementById('now-card');
-  if (r.ok) {
-    const c = await r.json();
-    if (c) card.innerHTML = `现在：<strong>${c.name}</strong> &nbsp;|&nbsp; ${c.teacher} &nbsp;|&nbsp; ${c.location}`;
-    else card.textContent = '当前没有课';
-  } else { card.textContent = '当前没有课'; }
-}
+          <section class="panel workspace stack">
+            <div class="section-header">
+              <h3>教务抓取</h3>
+            </div>
+            <label class="field">
+              <span>教务账号</span>
+              <input id="fetch-account" placeholder="默认使用注册学号" type="text" />
+            </label>
+            <label class="field">
+              <span>教务密码</span>
+              <input id="fetch-password" placeholder="仅本次抓取使用" type="password" />
+            </label>
+            <label class="field">
+              <span>semester_id</span>
+              <input id="fetch-semester" placeholder="如 2025-2026-2" type="text" />
+            </label>
+            <label class="checkbox">
+              <input id="fetch-prefer-playwright" type="checkbox" />
+              <span>优先尝试 Playwright 回退路径</span>
+            </label>
+            <div class="button-row">
+              <button class="button" id="btn-fetch" type="button">提交抓取任务</button>
+            </div>
+            <p class="helper" id="fetch-status">尚未提交抓取任务。</p>
+          </section>
 
-function renderTable(data) {
-  const PERIODS = 12;
-  const body = document.getElementById('timetable-body');
-  body.innerHTML = '';
-  for (let p = 1; p <= PERIODS; p++) {
-    const tr = document.createElement('tr');
-    const td0 = document.createElement('td');
-    td0.className = 'period-label';
-    td0.textContent = `第${p}节`;
-    tr.appendChild(td0);
-    for (let d = 1; d <= 7; d++) {
-      const td = document.createElement('td');
-      const courses = (data[String(d)] || []).filter(c => c.period_start <= p && c.period_end >= p);
-      if (courses.length > 0 && courses[0].period_start === p) {
-        const c = courses[0];
-        const span = c.period_end - c.period_start + 1;
-        td.rowSpan = span;
-        td.innerHTML = `<div class="course-cell"><div class="name">${c.name}</div><div class="info">${c.teacher}<br>${c.location}</div></div>`;
-        tr.appendChild(td);
-      } else if (courses.length === 0) {
-        tr.appendChild(td);
-      }
-      // 若 period_start < p（合并行的后续格）则跳过
-    }
-    body.appendChild(tr);
-  }
-}
+          <section class="panel workspace stack">
+            <div class="section-header">
+              <h3 id="course-form-title">手动录入课程</h3>
+            </div>
+            <form class="stack" id="course-form">
+              <label class="field">
+                <span>课程名称</span>
+                <input id="course-name" required type="text" />
+              </label>
+              <div class="inline-grid">
+                <label class="field">
+                  <span>教师</span>
+                  <input id="course-teacher" type="text" />
+                </label>
+                <label class="field">
+                  <span>地点</span>
+                  <input id="course-location" type="text" />
+                </label>
+              </div>
+              <div class="inline-grid">
+                <label class="field">
+                  <span>星期</span>
+                  <select id="course-weekday">
+                    <option value="1">周一</option>
+                    <option value="2">周二</option>
+                    <option value="3">周三</option>
+                    <option value="4">周四</option>
+                    <option value="5">周五</option>
+                    <option value="6">周六</option>
+                    <option value="7">周日</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>周次类型</span>
+                  <select id="course-week-type">
+                    <option value="all">每周</option>
+                    <option value="odd">单周</option>
+                    <option value="even">双周</option>
+                  </select>
+                </label>
+              </div>
+              <div class="inline-grid">
+                <label class="field">
+                  <span>开始节次</span>
+                  <input id="course-period-start" max="12" min="1" type="number" value="1" />
+                </label>
+                <label class="field">
+                  <span>结束节次</span>
+                  <input id="course-period-end" max="12" min="1" type="number" value="2" />
+                </label>
+              </div>
+              <label class="field">
+                <span>周次列表</span>
+                <input id="course-weeks" placeholder="如 1-4,6,8-16" type="text" />
+              </label>
+              <div class="button-row">
+                <button class="button" type="submit">保存课程</button>
+                <button class="button secondary hidden" id="btn-cancel-edit" type="button">取消编辑</button>
+              </div>
+            </form>
+          </section>
 
-function renderEmptyTable() {
-  const body = document.getElementById('timetable-body');
-  body.innerHTML = '';
-  for (let p = 1; p <= 12; p++) {
-    const tr = document.createElement('tr');
-    const td0 = document.createElement('td'); td0.className = 'period-label'; td0.textContent = `第${p}节`;
-    tr.appendChild(td0);
-    for (let d = 0; d < 7; d++) tr.appendChild(document.createElement('td'));
-    body.appendChild(tr);
-  }
-}
+          <section class="panel workspace stack">
+            <div class="section-header">
+              <h3>课程列表</h3>
+              <span class="subtle" id="course-count">0 门</span>
+            </div>
+            <div class="course-list" id="course-list"></div>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </main>
 
-document.getElementById('btn-prev-week').onclick = () => { weekOffset--; loadWeek(); };
-document.getElementById('btn-next-week').onclick = () => { weekOffset++; loadWeek(); };
-
-document.getElementById('btn-logout').onclick = async () => {
-  await fetch(`${API}/auth/logout`, { method: 'POST', credentials: 'include' });
-  document.getElementById('view-schedule').style.display = 'none';
-  document.getElementById('view-login').style.display = 'block';
-  document.getElementById('header-user').textContent = '';
-};
-
-document.getElementById('btn-fetch').onclick = async () => {
-  const pwd = prompt('请输入华南师大教务系统密码（用于自动抓取课表）：');
-  if (!pwd) return;
-  const r = await fetch(`${API}/schedule/fetch`, {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    credentials: 'include', body: JSON.stringify({ scnu_password: pwd })
-  });
-  alert(r.ok ? '抓取任务已提交，请稍后刷新课表' : '提交失败，请检查密码或稍后重试');
-};
-
-// 页面加载时检查登录态
-(async () => {
-  const r = await fetch(`${API}/auth/me`, { credentials: 'include' });
-  if (r.ok) enterScheduleView();
-})();
-</script>
+  <script defer src="/app.js"></script>
 </body>
 </html>

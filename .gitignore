@@ -1,12 +1,33 @@
-#python env/cache
+# Python virtual environments
 python_env/
+.venv/
+.venv*/
+venv/
+
+# Python caches and local tooling state
 __pycache__/
-#Server log
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime data
+data/users.json
+data/schedules/*.json
+!data/schedules/.gitkeep
+
+# Logs and temp files
 logs/
-#test scripts
+.tmp/
+*.log
+
+# Local test scripts
 test/
-#vscode settings
+
+# Editor settings
 .vscode/
-#claude config
+
+# Local agent config
 .claude/
 
