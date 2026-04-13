@@ -7,3 +7,6 @@ python-multipart
 passlib[bcrypt]
 rsa
 playwright
+loguru
+httpx
+pytest

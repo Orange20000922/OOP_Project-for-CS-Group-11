@@ -8,6 +8,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from app.logging_config import logger
+
 
 def model_to_dict(value: Any) -> Any:
     if hasattr(value, "model_dump"):
@@ -22,6 +24,7 @@ def ensure_json_file(path: Path, default: Any) -> None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     write_json_atomic(path, default)
+    logger.info("Created JSON file {}", path)
 
 
 def read_json(path: Path, default: Any) -> Any:
@@ -31,6 +34,7 @@ def read_json(path: Path, default: Any) -> Any:
         try:
             return json.load(file)
         except json.JSONDecodeError as exc:
+            logger.error("Failed to decode JSON file {}", path)
             raise ValueError(f"Invalid JSON in {path}") from exc
 
 
@@ -53,6 +57,7 @@ def write_json_atomic(path: Path, data: Any) -> None:
                 time.sleep(0.05)
         if not replaced:
             # 某些 Windows 环境下替换临时文件会被拦截，回退到直接写目标文件。
+            logger.warning("Atomic replace failed for {}; falling back to direct write", path)
             path.write_text(serialized, encoding="utf-8")
     finally:
         if os.path.exists(temp_path):

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Cookie, HTTPException
 
+from app.logging_config import logger
 from app.models.course import Course
 from app.services import auth_service, schedule_service
 
@@ -18,8 +19,10 @@ async def query_now(session_token: str | None = Cookie(None)):
         student_id = auth_service.get_student_id(session_token)
         return schedule_service.get_current_course(student_id)
     except PermissionError as exc:
+        logger.warning("Query now request failed with auth error: {}", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Query now request failed with schedule error: {}", exc)
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
@@ -33,8 +36,10 @@ async def query_today(session_token: str | None = Cookie(None)):
         student_id = auth_service.get_student_id(session_token)
         return schedule_service.get_today_courses(student_id)
     except PermissionError as exc:
+        logger.warning("Query today request failed with auth error: {}", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Query today request failed with schedule error: {}", exc)
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
@@ -48,8 +53,10 @@ async def query_week(session_token: str | None = Cookie(None)):
         student_id = auth_service.get_student_id(session_token)
         return schedule_service.get_week_courses(student_id, week_offset=0)
     except PermissionError as exc:
+        logger.warning("Query week request failed with auth error: {}", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Query week request failed with schedule error: {}", exc)
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
@@ -62,6 +69,8 @@ async def query_week_offset(offset: int, session_token: str | None = Cookie(None
         student_id = auth_service.get_student_id(session_token)
         return schedule_service.get_week_courses(student_id, week_offset=offset)
     except PermissionError as exc:
+        logger.warning("Query week offset request failed with auth error: {}", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Query week offset request failed with schedule error: {}", exc)
         raise HTTPException(status_code=404, detail=str(exc)) from exc
