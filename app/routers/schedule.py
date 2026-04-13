@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Cookie, File, HTTPException, Response, UploadFile, status
 
+from app.logging_config import logger
 from app.models.course import Course, CourseCreate, FetchTaskStatus, SCNUFetchRequest, Schedule, ScheduleInit
 from app.services import auth_service, schedule_service
 
@@ -12,8 +13,10 @@ async def get_schedule(session_token: str | None = Cookie(None)):
         student_id = auth_service.get_student_id(session_token)
         return schedule_service.get_schedule(student_id)
     except PermissionError as exc:
+        logger.warning("Get schedule request failed with auth error: {}", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Get schedule request failed with schedule error: {}", exc)
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
@@ -23,8 +26,10 @@ async def init_schedule(body: ScheduleInit, session_token: str | None = Cookie(N
         student_id = auth_service.get_student_id(session_token)
         return schedule_service.initialize_schedule(student_id, body)
     except PermissionError as exc:
+        logger.warning("Init schedule request failed with auth error: {}", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Init schedule request failed with validation error: {}", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -43,10 +48,13 @@ async def upload_schedule(
             content=content,
         )
     except PermissionError as exc:
+        logger.warning("Upload schedule request failed with auth error: {}", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Upload schedule request failed with validation error: {}", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
+        logger.warning("Upload schedule request failed with parser error: {}", exc)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
@@ -56,8 +64,10 @@ async def fetch_from_scnu(body: SCNUFetchRequest, session_token: str | None = Co
         student_id = auth_service.get_student_id(session_token)
         return schedule_service.submit_scnu_fetch(student_id, body)
     except PermissionError as exc:
+        logger.warning("Fetch schedule request failed with auth error: {}", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Fetch schedule request failed with validation error: {}", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -67,8 +77,10 @@ async def get_fetch_status(task_id: str, session_token: str | None = Cookie(None
         auth_service.get_student_id(session_token)
         return schedule_service.get_fetch_task(task_id)
     except PermissionError as exc:
+        logger.warning("Get fetch status request failed with auth error: {}", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Get fetch status request failed with task error: {}", exc)
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
@@ -78,8 +90,10 @@ async def add_course(course: CourseCreate, session_token: str | None = Cookie(No
         student_id = auth_service.get_student_id(session_token)
         return schedule_service.add_course(student_id, course)
     except PermissionError as exc:
+        logger.warning("Add course request failed with auth error: {}", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Add course request failed with validation error: {}", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -93,8 +107,10 @@ async def update_course(
         student_id = auth_service.get_student_id(session_token)
         return schedule_service.update_course(student_id, course_id, course)
     except PermissionError as exc:
+        logger.warning("Update course request failed with auth error: {}", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Update course request failed with validation error: {}", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -105,6 +121,8 @@ async def delete_course(course_id: str, session_token: str | None = Cookie(None)
         schedule_service.delete_course(student_id, course_id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except PermissionError as exc:
+        logger.warning("Delete course request failed with auth error: {}", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning("Delete course request failed with validation error: {}", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
