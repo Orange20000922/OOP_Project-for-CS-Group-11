@@ -4,6 +4,7 @@ from threading import Lock
 from uuid import uuid4
 
 from app.config import SCHEDULES_DIR
+from app.logging_config import logger
 from app.models.course import Course, CourseCreate, Schedule
 from app.storage.file_io import model_to_dict, read_json, write_json_atomic
 
@@ -25,6 +26,7 @@ class ScheduleStore:
     def __init__(self) -> None:
         self._lock = Lock()
         SCHEDULES_DIR.mkdir(parents=True, exist_ok=True)
+        logger.debug("ScheduleStore initialized with {}", SCHEDULES_DIR)
 
     def _path_for(self, student_id: str):
         return SCHEDULES_DIR / f"{student_id}.json"
@@ -43,6 +45,11 @@ class ScheduleStore:
             courses=_sort_courses(schedule.courses),
         )
         write_json_atomic(self._path_for(schedule.student_id), model_to_dict(normalized))
+        logger.info(
+            "Saved schedule for {} with {} courses",
+            schedule.student_id,
+            len(normalized.courses),
+        )
         return normalized
 
     def initialize(self, student_id: str, semester: str, semester_start: str) -> Schedule:
@@ -58,6 +65,7 @@ class ScheduleStore:
             else:
                 schedule.semester = semester
                 schedule.semester_start = semester_start
+            logger.info("Initialized schedule metadata for {}", student_id)
             return self.save(schedule)
 
     def replace(self, student_id: str, semester: str, semester_start: str, courses: list[Course]) -> Schedule:
@@ -75,16 +83,19 @@ class ScheduleStore:
         with self._lock:
             schedule = self.get(student_id)
             if schedule is None:
+                logger.warning("Attempted to add course before schedule initialization for {}", student_id)
                 raise ValueError("请先初始化课表")
             created = Course(id=uuid4().hex, **model_to_dict(course))
             schedule.courses.append(created)
             self.save(schedule)
+            logger.info("Added course {} to {}", created.id, student_id)
             return created
 
     def update_course(self, student_id: str, course_id: str, course: CourseCreate) -> Course:
         with self._lock:
             schedule = self.get(student_id)
             if schedule is None:
+                logger.warning("Attempted to update course before schedule initialization for {}", student_id)
                 raise ValueError("请先初始化课表")
 
             updated_course: Course | None = None
@@ -97,19 +108,24 @@ class ScheduleStore:
                     updated_courses.append(item)
 
             if updated_course is None:
+                logger.warning("Attempted to update missing course {} for {}", course_id, student_id)
                 raise ValueError("未找到对应课程")
 
             schedule.courses = updated_courses
             self.save(schedule)
+            logger.info("Updated course {} for {}", course_id, student_id)
             return updated_course
 
     def delete_course(self, student_id: str, course_id: str) -> None:
         with self._lock:
             schedule = self.get(student_id)
             if schedule is None:
+                logger.warning("Attempted to delete course before schedule initialization for {}", student_id)
                 raise ValueError("请先初始化课表")
             new_courses = [item for item in schedule.courses if item.id != course_id]
             if len(new_courses) == len(schedule.courses):
+                logger.warning("Attempted to delete missing course {} for {}", course_id, student_id)
                 raise ValueError("未找到对应课程")
             schedule.courses = new_courses
             self.save(schedule)
+            logger.info("Deleted course {} for {}", course_id, student_id)

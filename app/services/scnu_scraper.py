@@ -17,13 +17,16 @@ from app.config import (
     SCNU_LOGIN_PATH,
     SCNU_PUBLIC_KEY_PATH,
     SCNU_SCHEDULE_QUERY_PATH,
+    SCNU_SSO_AUTH_URL,
 )
+from app.logging_config import logger
 from app.models.course import Course
 
 
 class SCNUScraper:
     def __init__(self, base_url: str = SCNU_JWXT_BASE) -> None:
         self.base_url = base_url.rstrip("/")
+        logger.debug("SCNUScraper initialized for {}", self.base_url)
 
     def fetch_schedule(
         self,
@@ -33,6 +36,11 @@ class SCNUScraper:
         *,
         prefer_playwright: bool = False,
     ) -> list[Course]:
+        logger.info(
+            "Fetching SCNU schedule for account {} with prefer_playwright={}",
+            account,
+            prefer_playwright,
+        )
         if prefer_playwright:
             return self.fetch_schedule_via_playwright(account, password, semester_id)
         return self.fetch_schedule_via_reverse(account, password, semester_id)
@@ -43,6 +51,7 @@ class SCNUScraper:
         password: str,
         semester_id: str,
     ) -> list[Course]:
+        logger.info("Fetching schedule via reverse-engineered JWXT API for {}", account)
         session = requests.Session()
         session.headers.update(
             {
@@ -79,6 +88,7 @@ class SCNUScraper:
         )
         login_response.raise_for_status()
         if "用户登录" in login_response.text and "统一身份认证" in login_response.text:
+            logger.error("SCNU JWXT reverse login failed for {}", account)
             raise RuntimeError("SCNU 教务登录失败，可能需要统一认证/验证码或接口参数已变化")
 
         xnm, xqm = self._normalize_semester(semester_id)
@@ -91,11 +101,14 @@ class SCNUScraper:
         try:
             payload = query_response.json()
         except json.JSONDecodeError as exc:
+            logger.error("SCNU schedule API did not return JSON for {}", account)
             raise RuntimeError("课表接口未返回 JSON，可能需要补充逆向参数") from exc
 
         courses = self.parse_schedule_payload(payload)
         if not courses:
+            logger.warning("No courses parsed from reverse JWXT API for {}", account)
             raise RuntimeError("未解析到课表数据，请检查 semester_id 或接口字段")
+        logger.info("Fetched {} courses via reverse JWXT API for {}", len(courses), account)
         return courses
 
     def fetch_schedule_via_playwright(
@@ -104,12 +117,120 @@ class SCNUScraper:
         password: str,
         semester_id: str,
     ) -> list[Course]:
-        raise RuntimeError("Playwright 登录和 PDF 下载回退路径已预留，尚需按 SCNU 当前页面补选择器")
+        """Playwright 回退路径：通过 SSO 统一身份认证登录，获取 session cookies，
+        再用 requests 调用课表 JSON API。"""
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as exc:
+            logger.error("Playwright dependency missing when fetching schedule for {}", account)
+            raise RuntimeError(
+                "缺少 playwright，请运行: pip install playwright && playwright install chromium"
+            ) from exc
+
+        cookies = self._sso_login_via_playwright(account, password)
+
+        session = requests.Session()
+        session.cookies.update(cookies)
+        session.headers.update(
+            {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/135.0.0.0 Safari/537.36"
+                ),
+                "Referer": f"{self.base_url}/kbcx/xskbcx_cxXskbcxIndex.html",
+            }
+        )
+
+        xnm, xqm = self._normalize_semester(semester_id)
+        query_url = urljoin(self.base_url, SCNU_SCHEDULE_QUERY_PATH)
+        resp = session.post(query_url, data={"xnm": xnm, "xqm": xqm}, timeout=20)
+        resp.raise_for_status()
+        try:
+            payload = resp.json()
+        except json.JSONDecodeError as exc:
+            logger.error("SSO schedule API did not return JSON for {}", account)
+            raise RuntimeError("SSO 登录后课表接口未返回 JSON") from exc
+
+        courses = self.parse_schedule_payload(payload)
+        if not courses:
+            logger.warning("No courses parsed from SSO JWXT API for {}", account)
+            raise RuntimeError("未解析到课表数据，请检查 semester_id 或接口字段")
+        logger.info("Fetched {} courses via Playwright SSO for {}", len(courses), account)
+        return courses
+
+    def _sso_login_via_playwright(self, account: str, password: str) -> dict[str, str]:
+        """通过 Playwright 完成 SSO 登录，返回 jwxt 的 session cookies。
+
+        流程：SSO 登录页 → 填写账号密码 → 确认跳转(gotoApp) → jwxt 主页。
+        """
+        from playwright.sync_api import sync_playwright
+
+        logger.info("Starting Playwright SSO login for {}", account)
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            try:
+                context = browser.new_context(
+                    viewport={"width": 1920, "height": 1080},
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/135.0.0.0 Safari/537.36"
+                    ),
+                )
+                page = context.new_page()
+
+                # ---- 1. SSO 登录页 ----
+                page.goto(SCNU_SSO_AUTH_URL, wait_until="networkidle", timeout=30_000)
+                page.fill("#account", account)
+                page.fill("#password", password)
+                page.click("#btn-password-login")
+                page.wait_for_load_state("networkidle", timeout=15_000)
+
+                # 检查是否需要验证码
+                code_input = page.locator(".code-input")
+                if code_input.count() > 0:
+                    style = code_input.get_attribute("style") or ""
+                    if "none" not in style:
+                        logger.warning("SSO login for {} requires captcha", account)
+                        raise RuntimeError("SSO 登录触发了验证码，Playwright 自动化无法处理")
+
+                if "sso.scnu.edu.cn" not in page.url:
+                    logger.error("SSO login for {} redirected to unexpected URL {}", account, page.url)
+                    raise RuntimeError(f"SSO 登录后跳转异常: {page.url}")
+
+                # ---- 2. 确认跳转页 ----
+                # SSO 登录成功后会显示"确认登录"页面，需调用 gotoApp()
+                try:
+                    page.evaluate("gotoApp()")
+                except Exception:
+                    logger.exception("SSO gotoApp() failed for {}", account)
+                    raise RuntimeError("SSO 确认跳转失败，请检查账号密码是否正确")
+
+                try:
+                    page.wait_for_url("**/jwxt.scnu.edu.cn/**", timeout=20_000)
+                except Exception:
+                    logger.exception("SSO redirect to JWXT timed out for {}", account)
+                    raise RuntimeError(
+                        f"SSO 未成功跳转到教务系统，当前页面: {page.url}"
+                    )
+                page.wait_for_load_state("networkidle", timeout=15_000)
+
+                # ---- 3. 提取 cookies ----
+                cookies = {c["name"]: c["value"] for c in context.cookies()}
+                logger.info("SSO login completed for {}", account)
+                return cookies
+            finally:
+                browser.close()
 
     def parse_pdf_schedule(self, content: bytes) -> list[Course]:
         try:
             import pdfplumber
         except ImportError as exc:  # pragma: no cover
+            logger.error("pdfplumber dependency missing while parsing PDF schedule")
             raise RuntimeError("缺少 pdfplumber，无法解析 PDF 课表") from exc
 
         temp_path: Path | None = None
@@ -125,11 +246,13 @@ class SCNUScraper:
                         courses.extend(self._parse_pdf_table(table))
             deduped = self._deduplicate_courses(courses)
             if deduped:
+                logger.info("Parsed {} courses from uploaded PDF schedule", len(deduped))
                 return deduped
         finally:
             if temp_path and temp_path.exists():
                 temp_path.unlink(missing_ok=True)
 
+        logger.warning("Failed to parse any courses from uploaded PDF schedule")
         raise RuntimeError("未能从 PDF 中解析出课程，请改用标准 JSON 上传或手动录入")
 
     def parse_schedule_payload(self, payload: dict) -> list[Course]:
@@ -171,6 +294,7 @@ class SCNUScraper:
         try:
             import rsa
         except ImportError as exc:  # pragma: no cover
+            logger.error("rsa dependency missing while encrypting SCNU password")
             raise RuntimeError("缺少 rsa 依赖，无法执行新版正方登录加密") from exc
 
         modulus = int.from_bytes(base64.b64decode(modulus_b64), "big")
@@ -190,12 +314,14 @@ class SCNUScraper:
         modulus = payload.get("modulus")
         exponent = payload.get("exponent")
         if not modulus or not exponent:
+            logger.error("SCNU JWXT public key response missing modulus or exponent")
             raise RuntimeError("未获取到教务系统公钥")
         return {"modulus": modulus, "exponent": exponent}
 
     def _extract_csrf_token(self, html: str) -> str:
         match = re.search(r'name="csrftoken"\s+value="([^"]+)"', html)
         if not match:
+            logger.error("Failed to find csrftoken on JWXT login page")
             raise RuntimeError("未在登录页中找到 csrftoken")
         return match.group(1)
 
@@ -203,6 +329,7 @@ class SCNUScraper:
         try:
             start_year, _, term = semester_id.split("-")
         except ValueError as exc:
+            logger.warning("Rejected invalid semester_id {}", semester_id)
             raise RuntimeError("semester_id 格式应为 2025-2026-2") from exc
 
         term_mapping = {"1": "3", "2": "12", "3": "16"}
@@ -211,6 +338,7 @@ class SCNUScraper:
     def _parse_period_range(self, raw: str) -> tuple[int, int]:
         matches = re.findall(r"\d+", raw)
         if not matches:
+            logger.warning("Rejected invalid period range {}", raw)
             raise RuntimeError(f"无法解析节次信息: {raw}")
         start = int(matches[0])
         end = int(matches[1]) if len(matches) > 1 else start
