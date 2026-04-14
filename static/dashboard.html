@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>课表工作台 | 学生课表管理系统</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">SCNU Schedule Workspace</p>
+      <h1>课表工作台</h1>
+      <p class="subtle">这里先保留页面壳子、登录态守卫和后端 API 调用入口，具体业务展示可继续扩展。</p>
+    </div>
+    <div class="topbar-meta">
+      <span id="header-user"></span>
+      <button class="button secondary" id="btn-logout" type="button">退出登录</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="app-shell">
+      <div class="status-banner" id="global-message">正在验证登录状态。</div>
+
+      <div class="layout">
+        <section class="panel workspace stack">
+          <div class="section-header">
+            <div>
+              <h2>工作台主区域</h2>
+              <p class="subtle">预留给课表渲染、当前课程、周切换等主功能。</p>
+            </div>
+          </div>
+          <div class="now-card" id="workspace-placeholder">
+            页面壳子已就绪。队友可以在此挂载课表组件，并通过 `window.scheduleDashboard.api(...)` 调后端接口。
+          </div>
+        </section>
+
+        <aside class="side-column">
+          <section class="panel workspace stack">
+            <div class="section-header">
+              <h3>保留区</h3>
+            </div>
+            <p class="helper">建议在这里继续接入学期信息、文件上传、手动录课、教务抓取等入口。</p>
+            <div id="sidebar-placeholder" class="helper">当前仅提供结构占位，不绑定具体业务逻辑。</div>
+          </section>
+
+          <section class="panel workspace stack">
+            <div class="section-header">
+              <h3>可用接口</h3>
+            </div>
+            <div class="helper">`/auth/me`</div>
+            <div class="helper">`/schedule`</div>
+            <div class="helper">`/schedule/upload`</div>
+            <div class="helper">`/schedule/fetch`</div>
+            <div class="helper">`/schedule/course`</div>
+            <div class="helper">`/query/now`</div>
+            <div class="helper">`/query/today`</div>
+            <div class="helper">`/query/week`</div>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script defer src="/dashboard.js"></script>
+</body>
+</html>
