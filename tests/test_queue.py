@@ -1,4 +1,4 @@
-from task_queue import Queue
+from app.core.queue import Queue
 
 q = Queue()
 
