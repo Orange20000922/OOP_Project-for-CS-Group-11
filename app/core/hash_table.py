@@ -7,14 +7,14 @@ K = TypeVar("K")
 V = TypeVar("V")
 _MISSING = object()
 
-
+# 链表节点
 @dataclass(slots=True)
 class _Node(Generic[K, V]):
     key: K
     value: V
     next: _Node[K, V] | None = None
 
-
+# 链地址法桶实现
 @dataclass(slots=True)
 class _Bucket(Generic[K, V]):
     tail: _Node[K, V] | None = None
@@ -76,7 +76,7 @@ class _Bucket(Generic[K, V]):
                 break
             current = current.next
 
-
+# 基于链地址法的哈希表实现
 class HashTable(Generic[K, V]):
     def __init__(self, bucket_count: int = 16, load_factor: float = 0.75) -> None:
         if bucket_count <= 0:
