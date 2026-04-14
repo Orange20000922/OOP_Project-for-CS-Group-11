@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>学生课表管理系统</title>
+  <title>登录 | 学生课表管理系统</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
@@ -11,10 +11,7 @@
     <div>
       <p class="eyebrow">SCNU Schedule Workspace</p>
       <h1>学生课表管理系统</h1>
-    </div>
-    <div class="topbar-meta">
-      <span id="header-user"></span>
-      <button class="button secondary hidden" id="btn-logout" type="button">退出登录</button>
+      <p class="subtle">登录成功后会跳转到独立的课表工作台页面。</p>
     </div>
   </header>
 
@@ -42,188 +39,14 @@
           </label>
         </div>
         <div class="button-row" style="margin-top: 24px;">
-          <button class="button" id="btn-submit-auth" type="button">登录</button>
+          <button class="button" id="btn-submit-auth" type="button">登录并进入工作台</button>
           <button class="button secondary" id="btn-toggle-auth" type="button">没有账号？去注册</button>
         </div>
         <div class="message" id="auth-message"></div>
       </div>
     </section>
-
-    <section class="app-shell hidden" id="view-app">
-      <div class="status-banner" id="global-message">请先初始化学期信息。</div>
-
-      <div class="layout">
-        <section class="panel workspace stack">
-          <div class="section-header">
-            <div>
-              <h2>课表总览</h2>
-              <p class="subtle">查询本周安排、当前课程，并保留手动维护入口。</p>
-            </div>
-          </div>
-
-          <div class="now-card" id="now-card">当前节次没有课程。</div>
-
-          <div class="toolbar">
-            <div class="button-row">
-              <button class="button secondary" id="btn-prev-week" type="button">上周</button>
-              <button class="button secondary" id="btn-next-week" type="button">下周</button>
-            </div>
-            <h3 class="week-title" id="week-label">本周课表</h3>
-          </div>
-
-          <div class="table-wrap">
-            <table class="timetable">
-              <thead>
-                <tr>
-                  <th class="period-label">节次</th>
-                  <th>周一</th>
-                  <th>周二</th>
-                  <th>周三</th>
-                  <th>周四</th>
-                  <th>周五</th>
-                  <th>周六</th>
-                  <th>周日</th>
-                </tr>
-              </thead>
-              <tbody id="timetable-body"></tbody>
-            </table>
-          </div>
-        </section>
-
-        <aside class="side-column">
-          <section class="panel workspace stack">
-            <div class="section-header">
-              <h3>学期信息</h3>
-            </div>
-            <div class="inline-grid">
-              <label class="field">
-                <span>学期标识</span>
-                <input id="input-semester" placeholder="如 2025-2026-2" type="text" />
-              </label>
-              <label class="field">
-                <span>开学日期</span>
-                <input id="input-semester-start" type="date" />
-              </label>
-            </div>
-            <div class="button-row">
-              <button class="button" id="btn-save-schedule-meta" type="button">保存学期信息</button>
-            </div>
-          </section>
-
-          <section class="panel workspace stack">
-            <div class="section-header">
-              <h3>导入文件</h3>
-            </div>
-            <label class="field">
-              <span>JSON 或 PDF 课表</span>
-              <input id="input-upload-file" accept=".json,.pdf" type="file" />
-            </label>
-            <div class="button-row">
-              <button class="button" id="btn-upload" type="button">上传并覆盖当前课表</button>
-            </div>
-            <p class="helper">JSON 优先可用；PDF 走回退解析路径，格式变化时可能失败。</p>
-          </section>
-
-          <section class="panel workspace stack">
-            <div class="section-header">
-              <h3>教务抓取</h3>
-            </div>
-            <label class="field">
-              <span>教务账号</span>
-              <input id="fetch-account" placeholder="默认使用注册学号" type="text" />
-            </label>
-            <label class="field">
-              <span>教务密码</span>
-              <input id="fetch-password" placeholder="仅本次抓取使用" type="password" />
-            </label>
-            <label class="field">
-              <span>semester_id</span>
-              <input id="fetch-semester" placeholder="如 2025-2026-2" type="text" />
-            </label>
-            <label class="checkbox">
-              <input id="fetch-prefer-playwright" type="checkbox" />
-              <span>优先尝试 Playwright 回退路径</span>
-            </label>
-            <div class="button-row">
-              <button class="button" id="btn-fetch" type="button">提交抓取任务</button>
-            </div>
-            <p class="helper" id="fetch-status">尚未提交抓取任务。</p>
-          </section>
-
-          <section class="panel workspace stack">
-            <div class="section-header">
-              <h3 id="course-form-title">手动录入课程</h3>
-            </div>
-            <form class="stack" id="course-form">
-              <label class="field">
-                <span>课程名称</span>
-                <input id="course-name" required type="text" />
-              </label>
-              <div class="inline-grid">
-                <label class="field">
-                  <span>教师</span>
-                  <input id="course-teacher" type="text" />
-                </label>
-                <label class="field">
-                  <span>地点</span>
-                  <input id="course-location" type="text" />
-                </label>
-              </div>
-              <div class="inline-grid">
-                <label class="field">
-                  <span>星期</span>
-                  <select id="course-weekday">
-                    <option value="1">周一</option>
-                    <option value="2">周二</option>
-                    <option value="3">周三</option>
-                    <option value="4">周四</option>
-                    <option value="5">周五</option>
-                    <option value="6">周六</option>
-                    <option value="7">周日</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>周次类型</span>
-                  <select id="course-week-type">
-                    <option value="all">每周</option>
-                    <option value="odd">单周</option>
-                    <option value="even">双周</option>
-                  </select>
-                </label>
-              </div>
-              <div class="inline-grid">
-                <label class="field">
-                  <span>开始节次</span>
-                  <input id="course-period-start" max="12" min="1" type="number" value="1" />
-                </label>
-                <label class="field">
-                  <span>结束节次</span>
-                  <input id="course-period-end" max="12" min="1" type="number" value="2" />
-                </label>
-              </div>
-              <label class="field">
-                <span>周次列表</span>
-                <input id="course-weeks" placeholder="如 1-4,6,8-16" type="text" />
-              </label>
-              <div class="button-row">
-                <button class="button" type="submit">保存课程</button>
-                <button class="button secondary hidden" id="btn-cancel-edit" type="button">取消编辑</button>
-              </div>
-            </form>
-          </section>
-
-          <section class="panel workspace stack">
-            <div class="section-header">
-              <h3>课程列表</h3>
-              <span class="subtle" id="course-count">0 门</span>
-            </div>
-            <div class="course-list" id="course-list"></div>
-          </section>
-        </aside>
-      </div>
-    </section>
   </main>
 
-  <script defer src="/app.js"></script>
+  <script defer src="/auth.js"></script>
 </body>
 </html>
