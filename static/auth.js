@@ -1,4 +1,4 @@
-const DASHBOARD_PATH = "/dashboard.html";
+const DASHBOARD_PATH = "/dashboard";
 
 const state = {
   isRegister: false,

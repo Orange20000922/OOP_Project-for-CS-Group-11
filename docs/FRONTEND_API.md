@@ -6,11 +6,13 @@
 
 ### 1.0 页面入口
 
-- 登录页：`/`
-- 工作台页：`/dashboard.html`
-- 前端登录成功后，应跳转到 `/dashboard.html`
-- 若用户已登录，再访问 `/`，前端应直接跳转到 `/dashboard.html`
-- 若用户未登录却直接访问 `/dashboard.html`，前端应跳回 `/`
+- 登录页：`/login`
+- 工作台页：`/dashboard`
+- 根路径 `/` 会重定向到 `/login`
+- 前端登录成功后，应跳转到 `/dashboard`
+- 若用户已登录，再访问 `/login`，后端会重定向到 `/dashboard`
+- 若用户未登录却直接访问 `/dashboard`，后端会重定向到 `/login`
+- 静态资源通过 `/static/...` 暴露，例如 `/static/style.css`
 
 ### 1.1 基础说明
 

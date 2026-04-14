@@ -65,6 +65,7 @@ def app_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setattr(services_module, "scnu_scraper", scraper)
     monkeypatch.setattr(services_module, "auth_service", auth_service)
     monkeypatch.setattr(services_module, "schedule_service", schedule_service)
+    monkeypatch.setattr(main_module, "auth_service", auth_service)
 
     monkeypatch.setattr(auth_router, "auth_service", auth_service)
     monkeypatch.setattr(schedule_router, "auth_service", auth_service)
@@ -161,3 +162,47 @@ def test_query_requires_login_logs(app_client: TestClient, log_records):
     assert response.status_code == 401
     assert response.json()["detail"] == "未登录"
     assert any("Query week request failed with auth error" in record["message"] for record in log_records)
+
+
+def test_page_routes_redirect_and_guard_dashboard(app_client: TestClient):
+    root_response = app_client.get("/", follow_redirects=False)
+    assert root_response.status_code == 307
+    assert root_response.headers["location"] == "/login"
+
+    dashboard_response = app_client.get("/dashboard", follow_redirects=False)
+    assert dashboard_response.status_code == 307
+    assert dashboard_response.headers["location"] == "/login"
+
+    login_page_response = app_client.get("/login")
+    assert login_page_response.status_code == 200
+    assert "登录并进入工作台" in login_page_response.text
+
+    static_response = app_client.get("/static/style.css")
+    assert static_response.status_code == 200
+    assert ":root" in static_response.text
+
+
+def test_dashboard_route_serves_html_after_login(app_client: TestClient):
+    app_client.post(
+        "/auth/register",
+        json={
+            "student_id": "20250001",
+            "name": "张三",
+            "password": "password123",
+            "scnu_account": "20250001",
+        },
+    )
+    login_response = app_client.post(
+        "/auth/login",
+        json={"student_id": "20250001", "password": "password123"},
+    )
+    assert login_response.status_code == 200
+
+    login_page_response = app_client.get("/login", follow_redirects=False)
+    assert login_page_response.status_code == 307
+    assert login_page_response.headers["location"] == "/dashboard"
+
+    dashboard_response = app_client.get("/dashboard")
+    assert dashboard_response.status_code == 200
+    assert "课表工作台" in dashboard_response.text
+    assert "/static/dashboard.js" in dashboard_response.text

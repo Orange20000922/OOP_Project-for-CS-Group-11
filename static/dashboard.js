@@ -1,4 +1,4 @@
-const LOGIN_PAGE_PATH = "/";
+const LOGIN_PAGE_PATH = "/login";
 
 const state = {
   user: null,
