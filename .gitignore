@@ -31,3 +31,5 @@ test/
 # Local agent config
 .claude/
 
+# frontend lib
+node_modules/
