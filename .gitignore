@@ -16,7 +16,7 @@ __pycache__/
 data/users.json
 data/schedules/*.json
 !data/schedules/.gitkeep
-
+data/
 # Logs and temp files
 logs/
 .tmp/

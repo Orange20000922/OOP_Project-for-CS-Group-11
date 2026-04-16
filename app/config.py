@@ -7,7 +7,19 @@ USERS_FILE = DATA_DIR / "users.json"
 LOGS_DIR = DATA_DIR / "logs"
 APP_LOG_FILE = LOGS_DIR / "app.log"
 STATIC_DIR = BASE_DIR / "static"
+NOTES_DB_PATH = DATA_DIR / "notes.db"
+NOTE_FILES_DIR = DATA_DIR / "note_files"
+QDRANT_DB_DIR = DATA_DIR / "qdrant_db"
 LOG_LEVEL = "INFO"
+
+# DeepSeek LLM
+DEEPSEEK_API_KEY = ""
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+DEEPSEEK_MODEL = "deepseek-chat"
+
+# 文本切片
+CHUNK_MAX_LENGTH = 500
+CHUNK_OVERLAP = 50
 
 SESSION_COOKIE_NAME = "session_token"
 SESSION_EXPIRE_SECONDS = 7 * 24 * 3600

@@ -22,6 +22,9 @@ from app.config import (
 from app.logging_config import logger
 from app.models.course import Course
 
+# 负责从华师教务系统抓取课表数据，支持两种方式：
+# 1. 逆向 JWXT API：模拟登录流程，调用课表 JSON接口，解析返回数据。速度快但可能随教务系统更新而失效。
+# 2. Playwright 自动化：通过 SSO 登录获取 session cookies，再调用课表接口。更稳定但需要额外安装 Playwright 依赖和浏览器。
 
 class SCNUScraper:
     def __init__(self, base_url: str = SCNU_JWXT_BASE) -> None:
