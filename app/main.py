@@ -9,13 +9,14 @@ from app.config import (
     APP_LOG_FILE,
     DATA_DIR,
     LOGS_DIR,
+    NOTE_FILES_DIR,
     SCHEDULES_DIR,
     SESSION_COOKIE_NAME,
     STATIC_DIR,
     USERS_FILE,
 )
 from app.logging_config import configure_logging, logger
-from app.routers import auth, query, schedule
+from app.routers import auth, knowledge, note, query, schedule
 from app.services import auth_service
 
 configure_logging()
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     SCHEDULES_DIR.mkdir(parents=True, exist_ok=True)
+    NOTE_FILES_DIR.mkdir(parents=True, exist_ok=True)
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
     if not USERS_FILE.exists():
         USERS_FILE.write_text('{"users": []}', encoding="utf-8")
@@ -44,6 +46,8 @@ app = FastAPI(
 app.include_router(auth.router)
 app.include_router(schedule.router)
 app.include_router(query.router)
+app.include_router(note.router)
+app.include_router(knowledge.router)
 
 
 @app.get("/", include_in_schema=False)

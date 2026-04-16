@@ -34,7 +34,7 @@ class AuthService:
         self._lock = Lock()
         self._pwd_context = self._build_password_context()
         logger.debug("AuthService initialized")
-
+    # ── 用户认证与会话管理 ──
     def register(self, payload: UserCreate) -> UserInfo:
         user = User(
             student_id=payload.student_id.strip(),

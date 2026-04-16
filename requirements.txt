@@ -10,3 +10,8 @@ playwright
 loguru
 httpx
 pytest
+python-docx
+mem0ai
+qdrant-client
+sentence-transformers
+openai
