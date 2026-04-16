@@ -209,5 +209,8 @@ def test_graph_endpoint_returns_graph(monkeypatch: pytest.MonkeyPatch, tmp_path)
             "top_k": 2,
             "min_score": 0.65,
             "max_nodes": 50,
+            "query": "",
+            "topic_id": None,
+            "topic_limit": 3,
         }
     ]

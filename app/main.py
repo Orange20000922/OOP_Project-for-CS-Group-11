@@ -60,7 +60,7 @@ async def login_page(session_token: str | None = Cookie(None, alias=SESSION_COOK
     try:
         auth_service.get_student_id(session_token)
     except PermissionError:
-        return FileResponse(STATIC_DIR / "index.html")
+        return FileResponse(STATIC_DIR / "login_v2.html")
     return RedirectResponse(url="/dashboard", status_code=307)
 
 
@@ -70,7 +70,16 @@ async def dashboard_page(session_token: str | None = Cookie(None, alias=SESSION_
         auth_service.get_student_id(session_token)
     except PermissionError:
         return RedirectResponse(url="/login", status_code=307)
-    return FileResponse(STATIC_DIR / "dashboard.html")
+    return FileResponse(STATIC_DIR / "dashboard_v2.html")
+
+
+@app.get("/knowledge-workspace", include_in_schema=False)
+async def knowledge_workspace_page(session_token: str | None = Cookie(None, alias=SESSION_COOKIE_NAME)):
+    try:
+        auth_service.get_student_id(session_token)
+    except PermissionError:
+        return RedirectResponse(url="/login", status_code=307)
+    return FileResponse(STATIC_DIR / "knowledge_workspace.html")
 
 
 @app.middleware("http")
@@ -100,3 +109,18 @@ async def log_requests(request: Request, call_next):
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount(
+    "/vendor/vue",
+    StaticFiles(directory=str(STATIC_DIR.parent / "node_modules" / "vue" / "dist"), check_dir=False),
+    name="vendor-vue",
+)
+app.mount(
+    "/vendor/cytoscape",
+    StaticFiles(directory=str(STATIC_DIR.parent / "node_modules" / "cytoscape" / "dist"), check_dir=False),
+    name="vendor-cytoscape",
+)
+app.mount(
+    "/vendor/mammoth",
+    StaticFiles(directory=str(STATIC_DIR.parent / "node_modules" / "mammoth"), check_dir=False),
+    name="vendor-mammoth",
+)

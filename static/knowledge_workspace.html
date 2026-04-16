@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>知识工作台 | 学生课表管理系统</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/vue.css">
+  <link rel="stylesheet" href="/static/knowledge-workspace.css">
+</head>
+<body>
+  <div id="knowledge-app" v-cloak>
+    <header class="topbar knowledge-topbar">
+      <div class="knowledge-title-block">
+        <p class="eyebrow">Course Notes + Knowledge Workspace</p>
+        <h1>{{ pageTitle }}</h1>
+        <p class="subtle">{{ pageSubtitle }}</p>
+        <div class="knowledge-meta-row">
+          <span class="stat-pill">笔记 {{ notes.length }}</span>
+          <span class="stat-pill">主题 {{ treeRows.length }}</span>
+          <span class="stat-pill">切片 {{ totalChunks }}</span>
+          <span class="stat-pill accent">图节点 {{ graphData.total_nodes || 0 }}</span>
+        </div>
+      </div>
+
+      <div class="topbar-meta knowledge-topbar-meta">
+        <span v-if="user" class="user-pill">{{ user.name }} · {{ user.student_id }}</span>
+
+        <label class="field course-switcher">
+          <span>课程视图</span>
+          <select v-model="courseId" @change="handleCourseChange">
+            <option value="">全部课程</option>
+            <option v-for="course in sortedCourses" :key="course.id" :value="course.id">
+              {{ course.name }}
+            </option>
+          </select>
+        </label>
+
+        <div class="button-row topbar-actions">
+          <a class="button secondary small" href="/dashboard">返回课表</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="page knowledge-page">
+      <div :class="statusClass">{{ statusText }}</div>
+
+      <div class="knowledge-shell">
+        <aside class="knowledge-column knowledge-column-left">
+          <section class="panel workspace stack knowledge-panel knowledge-hero">
+            <div class="section-header">
+              <div>
+                <h2>{{ selectedCourse ? selectedCourse.name : "全局知识工作台" }}</h2>
+                <p class="subtle">{{ selectedCourse ? courseSummary(selectedCourse) : "当前展示全部课程下的笔记、知识树和图谱视图。" }}</p>
+              </div>
+              <span class="course-chip">{{ courseScopeLabel }}</span>
+            </div>
+
+            <div class="fact-grid">
+              <article class="fact-card">
+                <span>教师 / 地点</span>
+                <strong>{{ selectedCourse ? (selectedCourse.teacher || "未填写教师") : "跨课程" }}</strong>
+                <small>{{ selectedCourse ? (selectedCourse.location || "未填写地点") : "统一检索与预览" }}</small>
+              </article>
+              <article class="fact-card">
+                <span>可见笔记</span>
+                <strong>{{ visibleNotes.length }}</strong>
+                <small>{{ activeTopicId ? "按主题筛选中" : "当前课程全部笔记" }}</small>
+              </article>
+              <article class="fact-card">
+                <span>图谱状态</span>
+                <strong>{{ graphData.total_links || 0 }} 条边</strong>
+                <small>{{ graphData.routing_applied ? "已启用主题路由" : "直接做 k-NN" }}</small>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel workspace stack knowledge-panel">
+            <div class="section-header">
+              <div>
+                <h3>知识树</h3>
+                <p class="subtle">先维护主干，再把笔记挂到主题下，图谱就不需要每次全量比较。</p>
+              </div>
+              <div class="button-row">
+                <button class="button secondary small" type="button" @click="clearActiveTopic">查看全部</button>
+                <button class="button ghost small" type="button" @click="useActiveTopicAsParent">以当前为父级</button>
+              </div>
+            </div>
+
+            <form class="stack topic-create-form" @submit.prevent="createTopic">
+              <div class="field-grid compact-fields">
+                <label class="field">
+                  <span>新主题名称</span>
+                  <input v-model.trim="topicCreateForm.name" type="text" placeholder="例如：继承与多态">
+                </label>
+
+                <label class="field">
+                  <span>父主题</span>
+                  <select v-model="topicCreateForm.parentId">
+                    <option value="">作为一级主题</option>
+                    <option v-for="row in topicOptions" :key="'create-' + row.topic.id" :value="row.topic.id">
+                      {{ topicOptionLabel(row) }}
+                    </option>
+                  </select>
+                </label>
+              </div>
+
+              <label class="field">
+                <span>摘要</span>
+                <textarea v-model.trim="topicCreateForm.summary" rows="3" placeholder="一句话描述这个知识分支。"></textarea>
+              </label>
+
+              <label class="field">
+                <span>关键词</span>
+                <input v-model.trim="topicCreateForm.keywords" type="text" placeholder="用逗号分隔，例如 类, 对象, 虚函数">
+              </label>
+
+              <div class="button-row">
+                <button class="button small" type="submit">新增主题</button>
+                <button class="button secondary small" type="button" @click="resetTopicCreateForm">清空</button>
+              </div>
+            </form>
+
+            <div class="tree-list" v-if="treeRows.length">
+              <button
+                v-for="row in treeRows"
+                :key="row.topic.id"
+                type="button"
+                class="tree-row"
+                :class="{ active: row.topic.id === activeTopicId }"
+                :style="{ paddingLeft: (16 + row.depth * 18) + 'px' }"
+                @click="setActiveTopic(row.topic.id)"
+              >
+                <div class="tree-row-main">
+                  <strong>{{ row.topic.name }}</strong>
+                  <span>{{ row.noteCount }} 份笔记</span>
+                </div>
+                <div class="tree-row-meta">
+                  <span v-if="row.topic.keywords.length">{{ row.topic.keywords.slice(0, 4).join(" / ") }}</span>
+                  <span v-else>{{ row.topic.summary || "暂无主题摘要" }}</span>
+                </div>
+              </button>
+            </div>
+            <div v-else class="empty-panel">
+              还没有知识主题。建议先建立一级主题，再逐步往下扩充分支。
+            </div>
+
+            <div class="topic-editor" v-if="selectedTopic">
+              <div class="section-header">
+                <div>
+                  <h3>主题详情</h3>
+                  <p class="subtle">选中主题后可调整层级、摘要和关键词。</p>
+                </div>
+                <span class="topic-badge">已选中</span>
+              </div>
+
+              <form class="stack" @submit.prevent="saveActiveTopic">
+                <div class="field-grid compact-fields">
+                  <label class="field">
+                    <span>主题名称</span>
+                    <input v-model.trim="topicEditForm.name" type="text">
+                  </label>
+
+                  <label class="field">
+                    <span>父主题</span>
+                    <select v-model="topicEditForm.parentId">
+                      <option value="">作为一级主题</option>
+                      <option v-for="row in editableParentOptions" :key="'edit-' + row.topic.id" :value="row.topic.id">
+                        {{ topicOptionLabel(row) }}
+                      </option>
+                    </select>
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span>摘要</span>
+                  <textarea v-model.trim="topicEditForm.summary" rows="3"></textarea>
+                </label>
+
+                <label class="field">
+                  <span>关键词</span>
+                  <input v-model.trim="topicEditForm.keywords" type="text" placeholder="用逗号分隔">
+                </label>
+
+                <div class="button-row">
+                  <button class="button small" type="submit">保存主题</button>
+                  <button class="button danger small" type="button" @click="deleteActiveTopic">删除主题</button>
+                </div>
+              </form>
+            </div>
+          </section>
+        </aside>
+
+        <section class="knowledge-column knowledge-column-center">
+          <section class="panel workspace stack knowledge-panel">
+            <div class="section-header">
+              <div>
+                <h2>笔记与预览</h2>
+                <p class="subtle">上传 PDF / DOCX 后，页面会同步刷新摘要、切片、知识树与图谱。</p>
+              </div>
+              <span class="stat-pill accent">可见 {{ visibleNotes.length }} / 总计 {{ notes.length }}</span>
+            </div>
+
+            <div class="upload-bar">
+              <label class="upload-box">
+                <span>选择笔记文件</span>
+                <input ref="uploadInput" type="file" accept=".pdf,.docx">
+              </label>
+              <button class="button" type="button" :disabled="uploadBusy" @click="submitUpload">
+                {{ uploadBusy ? "上传中..." : "上传并索引" }}
+              </button>
+            </div>
+
+            <div class="note-list" v-if="visibleNotes.length">
+              <article
+                v-for="note in visibleNotes"
+                :key="note.id"
+                class="note-card"
+                :class="{ active: note.id === selectedNoteId }"
+                @click="selectNote(note.id)"
+              >
+                <div class="note-card-head">
+                  <div>
+                    <h3>{{ noteDisplayTitle(note) }}</h3>
+                    <p>{{ note.filename }}</p>
+                  </div>
+                  <span class="note-type">{{ formatFileType(note.file_type) }}</span>
+                </div>
+
+                <div class="note-card-meta">
+                  <span>{{ formatDateTime(note.updated_at || note.created_at) }}</span>
+                  <span>{{ note.chunk_count }} 个切片</span>
+                </div>
+
+                <div class="tag-row">
+                  <span class="tag" v-if="note.course_id">{{ courseNameById(note.course_id) }}</span>
+                  <span class="tag accent" v-for="topic in noteTopicsById[note.id] || []" :key="note.id + '-' + topic.id">
+                    {{ topic.name }}
+                  </span>
+                </div>
+
+                <p class="note-summary">{{ note.summary || "暂无摘要，建议上传后稍等索引或手动补充说明。" }}</p>
+              </article>
+            </div>
+            <div v-else class="empty-panel">
+              当前筛选下还没有笔记。可以先上传文件，或者切回全部主题查看。
+            </div>
+
+            <div v-if="selectedNote && noteDetail" class="detail-shell">
+              <div class="detail-header">
+                <div>
+                  <h3>{{ noteDisplayTitle(selectedNote) }}</h3>
+                  <p class="subtle">可以直接修改标题、摘要和课程归属；图谱与知识树会随之同步。</p>
+                </div>
+                <div class="tag-row detail-tags">
+                  <span class="tag">{{ formatFileType(selectedNote.file_type) }}</span>
+                  <span class="tag" v-if="selectedNote.course_id">{{ courseNameById(selectedNote.course_id) }}</span>
+                  <span class="tag accent" v-if="selectedTopic">{{ selectedTopic.name }}</span>
+                </div>
+              </div>
+
+              <div class="field-grid">
+                <label class="field">
+                  <span>标题</span>
+                  <input v-model.trim="noteForm.title" type="text">
+                </label>
+
+                <label class="field">
+                  <span>课程归属</span>
+                  <select v-model="noteForm.courseId">
+                    <option value="">不关联课程</option>
+                    <option v-for="course in sortedCourses" :key="'note-course-' + course.id" :value="course.id">
+                      {{ course.name }}
+                    </option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>摘要</span>
+                  <textarea v-model.trim="noteForm.summary" rows="4"></textarea>
+                </label>
+              </div>
+
+              <div class="button-row">
+                <button class="button small" type="button" @click="saveNoteMeta">保存笔记信息</button>
+                <button
+                  v-if="activeTopicId && !selectedNoteInActiveTopic"
+                  class="button ghost small"
+                  type="button"
+                  @click="assignSelectedNoteToTopic"
+                >
+                  关联到当前主题
+                </button>
+                <button
+                  v-if="activeTopicId && selectedNoteInActiveTopic"
+                  class="button secondary small"
+                  type="button"
+                  @click="unassignSelectedNoteFromTopic"
+                >
+                  移出当前主题
+                </button>
+                <button class="button danger small" type="button" @click="deleteSelectedNote">删除笔记</button>
+              </div>
+
+              <div class="detail-grid">
+                <div class="preview-panel">
+                  <div class="preview-header">
+                    <strong>原文预览</strong>
+                    <span>{{ previewLabel }}</span>
+                  </div>
+
+                  <div class="preview-surface">
+                    <div v-if="previewLoading" class="preview-empty">正在加载预览...</div>
+                    <div v-else-if="previewKind === 'pdf'" class="preview-frame-wrap">
+                      <iframe class="preview-frame" :src="previewUrl" title="PDF 预览"></iframe>
+                    </div>
+                    <div v-else-if="previewKind === 'docx'" class="docx-preview" v-html="previewHtml"></div>
+                    <div v-else class="preview-empty">当前文件暂不支持预览。</div>
+                  </div>
+                </div>
+
+                <div class="chunk-panel">
+                  <div class="preview-header">
+                    <strong>文档切片</strong>
+                    <span>{{ noteDetail.chunks.length }} 个</span>
+                  </div>
+
+                  <div ref="chunkList" class="chunk-list" v-if="noteDetail.chunks.length">
+                    <article
+                      v-for="chunk in noteDetail.chunks"
+                      :key="chunk.chunk_id"
+                      class="chunk-card"
+                      :class="{ active: chunk.chunk_id === selectedChunkId }"
+                      :data-chunk-id="chunk.chunk_id"
+                      @click="selectChunk(chunk.chunk_id)"
+                    >
+                      <h4>{{ chunk.heading || ('切片 #' + (chunk.chunk_index + 1)) }}</h4>
+                      <p>{{ chunk.content }}</p>
+                    </article>
+                  </div>
+                  <div v-else class="preview-empty">当前笔记没有可用切片。</div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty-panel">
+              从上方列表选择一份笔记，即可编辑元信息、查看原文并定位切片。
+            </div>
+          </section>
+        </section>
+
+        <aside class="knowledge-column knowledge-column-right">
+          <section class="panel workspace stack knowledge-panel">
+            <div class="section-header">
+              <div>
+                <h3>问答</h3>
+                <p class="subtle">优先走课程级检索。若本地未配置 LLM，会退化为检索片段拼接结果。</p>
+              </div>
+            </div>
+
+            <label class="field">
+              <span>问题</span>
+              <textarea v-model.trim="askQuestion" rows="4" placeholder="例如：多态与继承是什么关系？"></textarea>
+            </label>
+
+            <div class="button-row">
+              <button class="button small" type="button" :disabled="askBusy" @click="submitAsk">
+                {{ askBusy ? "生成中..." : "提问" }}
+              </button>
+            </div>
+
+            <article class="answer-box" v-if="askAnswer">
+              <h4>回答</h4>
+              <p>{{ askAnswer }}</p>
+            </article>
+
+            <div class="result-list" v-if="askSources.length">
+              <button
+                v-for="source in askSources"
+                :key="'ask-' + source.chunk.chunk_id"
+                type="button"
+                class="result-card"
+                @click="openSearchResult(source)"
+              >
+                <div class="result-card-head">
+                  <strong>{{ source.note_title || "未命名笔记" }}</strong>
+                  <span>{{ scoreLabel(source.score) }}</span>
+                </div>
+                <h4>{{ source.chunk.heading || "未命名切片" }}</h4>
+                <p>{{ source.chunk.content }}</p>
+              </button>
+            </div>
+          </section>
+
+          <section class="panel workspace stack knowledge-panel">
+            <div class="section-header">
+              <div>
+                <h3>检索与图谱</h3>
+                <p class="subtle">检索用于定位切片；图谱按当前主题或查询先路由，再对候选节点做 Top-k 邻近连接。</p>
+              </div>
+            </div>
+
+            <div class="field-grid compact-fields">
+              <label class="field">
+                <span>检索语句</span>
+                <input v-model.trim="searchQuery" type="text" placeholder="例如：虚函数">
+              </label>
+
+              <label class="field">
+                <span>Graph Query</span>
+                <input v-model.trim="graphQuery" type="text" placeholder="留空则按当前课程 / 主题生成图谱">
+              </label>
+            </div>
+
+            <div class="button-row">
+              <button class="button small" type="button" :disabled="searchBusy" @click="runSearch">
+                {{ searchBusy ? "检索中..." : "检索切片" }}
+              </button>
+              <button class="button secondary small" type="button" :disabled="graphLoading" @click="loadGraph()">
+                {{ graphLoading ? "图谱生成中..." : "刷新图谱" }}
+              </button>
+            </div>
+
+            <div class="result-list" v-if="searchResults.length">
+              <button
+                v-for="result in searchResults"
+                :key="'search-' + result.chunk.chunk_id"
+                type="button"
+                class="result-card"
+                @click="openSearchResult(result)"
+              >
+                <div class="result-card-head">
+                  <strong>{{ result.note_title || "未命名笔记" }}</strong>
+                  <span>{{ scoreLabel(result.score) }}</span>
+                </div>
+                <h4>{{ result.chunk.heading || "未命名切片" }}</h4>
+                <p>{{ result.chunk.content }}</p>
+              </button>
+            </div>
+
+            <div class="graph-controls">
+              <label class="field">
+                <span>Top-k</span>
+                <input v-model.number="graphTopK" type="number" min="1" max="10">
+              </label>
+
+              <label class="field">
+                <span>最小相似度</span>
+                <input v-model.number="graphMinScore" type="number" min="0" max="1" step="0.05">
+              </label>
+
+              <label class="field">
+                <span>主题候选数</span>
+                <input v-model.number="graphTopicLimit" type="number" min="1" max="10">
+              </label>
+            </div>
+
+            <div class="tag-row graph-tags">
+              <span class="tag">{{ graphData.total_nodes || 0 }} 节点</span>
+              <span class="tag">{{ graphData.total_links || 0 }} 边</span>
+              <span class="tag accent" v-if="graphData.routing_applied">已主题路由</span>
+              <span class="tag accent" v-for="topicName in routedTopicNames" :key="'route-' + topicName">
+                {{ topicName }}
+              </span>
+            </div>
+
+            <div ref="graphCanvas" class="graph-canvas"></div>
+
+            <div class="helper" v-if="graphError">{{ graphError }}</div>
+            <div class="helper" v-else-if="!graphLoading && !(graphData.total_nodes || 0)">
+              当前还没有可渲染节点。请先上传并索引笔记，或调整主题/查询条件。
+            </div>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script src="/vendor/vue/vue.js"></script>
+  <script src="/static/shared.js"></script>
+  <script src="/vendor/cytoscape/cytoscape.umd.js"></script>
+  <script src="/vendor/mammoth/mammoth.browser.min.js"></script>
+  <script src="/static/knowledge-graph.js"></script>
+  <script src="/static/knowledge-workspace.js"></script>
+</body>
+</html>

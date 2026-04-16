@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.models.user import UserInfo
+
 
 class Course(BaseModel):
     id: str
@@ -31,6 +33,20 @@ class Schedule(BaseModel):
     semester: str
     semester_start: str
     courses: list[Course]
+
+
+def _empty_week_courses() -> dict[str, list[Course]]:
+    return {str(day): [] for day in range(1, 8)}
+
+
+class DashboardOverview(BaseModel):
+    user: UserInfo
+    schedule: Schedule | None = None
+    current_course: Course | None = None
+    today_courses: list[Course] = Field(default_factory=list)
+    week_courses: dict[str, list[Course]] = Field(default_factory=_empty_week_courses)
+    week_offset: int = 0
+    has_schedule: bool = False
 
 
 class ScheduleInit(BaseModel):

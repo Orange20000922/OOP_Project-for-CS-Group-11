@@ -1,0 +1,59 @@
+[v-cloak] {
+  display: none;
+}
+
+.auth-actions {
+  margin-top: 24px;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.secondary-card {
+  background: linear-gradient(135deg, rgba(212, 164, 95, 0.14), rgba(255, 249, 239, 0.95));
+  border-color: rgba(212, 164, 95, 0.2);
+}
+
+.mini-course-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mini-course-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(92, 59, 42, 0.08);
+}
+
+.mini-course-item span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.compact-grid {
+  margin-top: 0;
+}
+
+.empty-panel {
+  border: 1px dashed rgba(164, 60, 47, 0.24);
+  border-radius: 18px;
+  padding: 24px;
+  color: var(--muted);
+  line-height: 1.7;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+@media (max-width: 860px) {
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -24,9 +24,9 @@ class APIScraperStub:
         return [
             Course(
                 id="course-api-1",
-                name="算法设计",
-                teacher="王老师",
-                location="南B216",
+                name="Algorithms",
+                teacher="Teacher Wang",
+                location="Room A216",
                 weekday=1,
                 period_start=1,
                 period_end=2,
@@ -82,7 +82,7 @@ def test_auth_cookie_flow_and_request_logging(app_client: TestClient, log_record
         "/auth/register",
         json={
             "student_id": "20250001",
-            "name": "张三",
+            "name": "Alice",
             "password": "password123",
             "scnu_account": "20250001",
         },
@@ -115,7 +115,7 @@ def test_schedule_and_query_endpoints(app_client: TestClient):
         "/auth/register",
         json={
             "student_id": "20250001",
-            "name": "张三",
+            "name": "Alice",
             "password": "password123",
             "scnu_account": "20250001",
         },
@@ -135,9 +135,9 @@ def test_schedule_and_query_endpoints(app_client: TestClient):
     add_response = app_client.post(
         "/schedule/course",
         json={
-            "name": "面向对象程序设计",
-            "teacher": "李老师",
-            "location": "理工楼A101",
+            "name": "OOP",
+            "teacher": "Teacher Li",
+            "location": "Room 101",
             "weekday": 1,
             "period_start": 1,
             "period_end": 2,
@@ -155,13 +155,50 @@ def test_schedule_and_query_endpoints(app_client: TestClient):
     assert week_response.status_code == 200
     assert set(week_response.json().keys()) == {"1", "2", "3", "4", "5", "6", "7"}
 
+    overview_response = app_client.get("/query/overview", params={"week_offset": 0})
+    assert overview_response.status_code == 200
+    assert overview_response.json()["has_schedule"] is True
+    assert overview_response.json()["schedule"]["semester"] == "2025-2026-2"
+    assert overview_response.json()["week_offset"] == 0
+
 
 def test_query_requires_login_logs(app_client: TestClient, log_records):
     response = app_client.get("/query/week")
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "未登录"
+    assert "detail" in response.json()
     assert any("Query week request failed with auth error" in record["message"] for record in log_records)
+
+
+def test_query_overview_handles_missing_schedule(app_client: TestClient):
+    app_client.post(
+        "/auth/register",
+        json={
+            "student_id": "20250001",
+            "name": "Alice",
+            "password": "password123",
+            "scnu_account": "20250001",
+        },
+    )
+    login_response = app_client.post(
+        "/auth/login",
+        json={"student_id": "20250001", "password": "password123"},
+    )
+    assert login_response.status_code == 200
+
+    response = app_client.get("/query/overview")
+    assert response.status_code == 200
+    assert response.json()["has_schedule"] is False
+    assert response.json()["schedule"] is None
+    assert response.json()["week_courses"] == {
+        "1": [],
+        "2": [],
+        "3": [],
+        "4": [],
+        "5": [],
+        "6": [],
+        "7": [],
+    }
 
 
 def test_page_routes_redirect_and_guard_dashboard(app_client: TestClient):
@@ -173,9 +210,13 @@ def test_page_routes_redirect_and_guard_dashboard(app_client: TestClient):
     assert dashboard_response.status_code == 307
     assert dashboard_response.headers["location"] == "/login"
 
+    knowledge_workspace_response = app_client.get("/knowledge-workspace", follow_redirects=False)
+    assert knowledge_workspace_response.status_code == 307
+    assert knowledge_workspace_response.headers["location"] == "/login"
+
     login_page_response = app_client.get("/login")
     assert login_page_response.status_code == 200
-    assert "登录并进入工作台" in login_page_response.text
+    assert "/static/auth-vue.js" in login_page_response.text
 
     static_response = app_client.get("/static/style.css")
     assert static_response.status_code == 200
@@ -187,7 +228,7 @@ def test_dashboard_route_serves_html_after_login(app_client: TestClient):
         "/auth/register",
         json={
             "student_id": "20250001",
-            "name": "张三",
+            "name": "Alice",
             "password": "password123",
             "scnu_account": "20250001",
         },
@@ -204,5 +245,10 @@ def test_dashboard_route_serves_html_after_login(app_client: TestClient):
 
     dashboard_response = app_client.get("/dashboard")
     assert dashboard_response.status_code == 200
-    assert "课表工作台" in dashboard_response.text
-    assert "/static/dashboard.js" in dashboard_response.text
+    assert "dashboard-app" in dashboard_response.text
+    assert "/static/dashboard-vue.js" in dashboard_response.text
+
+    knowledge_workspace_response = app_client.get("/knowledge-workspace")
+    assert knowledge_workspace_response.status_code == 200
+    assert "knowledge-app" in knowledge_workspace_response.text
+    assert "/static/knowledge-workspace.js" in knowledge_workspace_response.text

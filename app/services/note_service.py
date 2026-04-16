@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from app.config import CHUNK_MAX_LENGTH, CHUNK_OVERLAP, NOTE_FILES_DIR
 from app.logging_config import logger
-from app.models.note import Note, NoteChunk, NoteDetail
+from app.models.note import Note, NoteChunk, NoteDetail, NoteUpdate
 from app.storage.note_store import NoteStore
 
 HEADING_PATTERNS = [
@@ -214,6 +214,23 @@ class NoteService:
 
     def list_notes(self, student_id: str, course_id: str | None = None) -> list[Note]:
         return self._store.list_by_student(student_id, course_id)
+
+    def update_metadata(self, student_id: str, note_id: str, payload: NoteUpdate) -> Note:
+        note = self._store.get_note(note_id)
+        if note is None:
+            raise ValueError("笔记不存在")
+        if note.student_id != student_id:
+            raise PermissionError("无权修改此笔记")
+
+        updates = payload.model_dump(exclude_unset=True)
+        if "title" in updates:
+            note.title = (updates["title"] or "").strip()
+        if "summary" in updates:
+            note.summary = (updates["summary"] or "").strip()
+        if "course_id" in updates:
+            note.course_id = (updates["course_id"] or None)
+        note.updated_at = datetime.now().isoformat()
+        return self._store.update_note(note)
 
     def delete(self, student_id: str, note_id: str) -> None:
         note = self._store.get_note(note_id)

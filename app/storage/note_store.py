@@ -132,10 +132,17 @@ class NoteStore:
             conn.execute(
                 """
                 UPDATE notes
-                SET title = ?, summary = ?, chunk_count = ?, updated_at = ?
+                SET course_id = ?, title = ?, summary = ?, chunk_count = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (note.title, note.summary, note.chunk_count, note.updated_at, note.id),
+                (
+                    note.course_id,
+                    note.title,
+                    note.summary,
+                    note.chunk_count,
+                    note.updated_at,
+                    note.id,
+                ),
             )
         logger.info("Updated note {}", note.id)
         return note

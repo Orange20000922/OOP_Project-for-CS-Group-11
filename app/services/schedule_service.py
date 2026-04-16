@@ -9,7 +9,16 @@ from uuid import uuid4
 from app.config import PERIOD_TIMES
 from app.core import HashTable
 from app.logging_config import logger
-from app.models.course import Course, CourseCreate, FetchTaskStatus, SCNUFetchRequest, Schedule, ScheduleInit
+from app.models.course import (
+    Course,
+    CourseCreate,
+    DashboardOverview,
+    FetchTaskStatus,
+    SCNUFetchRequest,
+    Schedule,
+    ScheduleInit,
+)
+from app.models.user import UserInfo
 from app.storage.file_io import model_to_dict
 from app.storage.schedule_store import ScheduleStore
 from app.services.scnu_scraper import SCNUScraper
@@ -105,13 +114,40 @@ class ScheduleService:
         schedule = self.get_schedule(student_id)
         target_day = date.today() + timedelta(days=week_offset * 7)
         week_number = self._calculate_week_number(schedule.semester_start, target_day)
-        result = HashTable[str, list[Course]](bucket_count=8)
-        for day in range(1, 8):
-            result[str(day)] = []
-        for course in schedule.courses:
-            if self._course_matches_week(course, week_number):
-                result[str(course.weekday)].append(course)
-        return {str(day): result[str(day)] for day in range(1, 8)}
+        return self._build_week_courses(schedule, week_number)
+
+    def get_dashboard_overview(self, user: UserInfo, week_offset: int = 0) -> DashboardOverview:
+        try:
+            schedule = self.get_schedule(user.student_id)
+        except ValueError:
+            return DashboardOverview(
+                user=user,
+                week_offset=week_offset,
+                has_schedule=False,
+            )
+
+        today = date.today()
+        today_week_number = self._calculate_week_number(schedule.semester_start, today)
+        target_day = today + timedelta(days=week_offset * 7)
+        target_week_number = self._calculate_week_number(schedule.semester_start, target_day)
+        current_period = self._find_period(datetime.now().time())
+
+        current_course = None
+        if current_period is not None:
+            for course in self._iter_courses_for_day(schedule, today_week_number, today.isoweekday()):
+                if course.period_start <= current_period <= course.period_end:
+                    current_course = course
+                    break
+
+        return DashboardOverview(
+            user=user,
+            schedule=schedule,
+            current_course=current_course,
+            today_courses=list(self._iter_courses_for_day(schedule, today_week_number, today.isoweekday())),
+            week_courses=self._build_week_courses(schedule, target_week_number),
+            week_offset=week_offset,
+            has_schedule=True,
+        )
 
     def submit_scnu_fetch(self, student_id: str, payload: SCNUFetchRequest) -> FetchTaskStatus:
         now = self._now_iso()
@@ -263,6 +299,15 @@ class ScheduleService:
             if not self._course_matches_week(course, week_number):
                 continue
             yield course
+
+    def _build_week_courses(self, schedule: Schedule, week_number: int) -> dict[str, list[Course]]:
+        result = HashTable[str, list[Course]](bucket_count=8)
+        for day in range(1, 8):
+            result[str(day)] = []
+        for course in schedule.courses:
+            if self._course_matches_week(course, week_number):
+                result[str(course.weekday)].append(course)
+        return {str(day): result[str(day)] for day in range(1, 8)}
 
     def _course_matches_week(self, course: Course, week_number: int) -> bool:
         if week_number <= 0:

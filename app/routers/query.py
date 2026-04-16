@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Cookie, HTTPException
 
 from app.logging_config import logger
-from app.models.course import Course
+from app.models.course import Course, DashboardOverview
 from app.services import auth_service, schedule_service
 
 router = APIRouter(prefix="/query", tags=["query"])
@@ -41,6 +41,19 @@ async def query_today(session_token: str | None = Cookie(None)):
     except ValueError as exc:
         logger.warning("Query today request failed with schedule error: {}", exc)
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/overview", response_model=DashboardOverview)
+async def query_overview(
+    week_offset: int = 0,
+    session_token: str | None = Cookie(None),
+):
+    try:
+        user = auth_service.get_current_user(session_token)
+        return schedule_service.get_dashboard_overview(user, week_offset=week_offset)
+    except PermissionError as exc:
+        logger.warning("Query overview request failed with auth error: {}", exc)
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
 @router.get("/week", response_model=dict[str, list[Course]])

@@ -11,7 +11,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
+.pytest*/
 # Runtime data
 data/users.json
 data/schedules/*.json
@@ -21,7 +21,7 @@ data/
 logs/
 .tmp/
 *.log
-
+.tmp*/
 # Local test scripts
 test/
 
@@ -30,6 +30,9 @@ test/
 
 # Local agent config
 .claude/
+app/config.py
 
 # frontend lib
 node_modules/
+front-for-note-module/
+node_modules
