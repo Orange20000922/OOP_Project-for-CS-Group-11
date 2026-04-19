@@ -71,35 +71,91 @@ function setGlobalMessage(text, type = "") {
   }
 }
 
-async function api(path, options = {}) {
-  const headers = new Headers(options.headers || {});
-  const isFormData = options.body instanceof FormData;
-  if (!isFormData && options.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
+function withLoading(button, fn) {
+  return async (...args) => {
+    if (button.disabled) return;
+    button.disabled = true;
+    button.textContent = "处理中...";
+    try {
+      await fn(...args);
+    } finally {
+      button.disabled = false;
+      button.textContent = button.dataset.text;
+     }
+  };
+}
 
-  const response = await fetch(path, {
+const requestLoading = new Set();
+async function api(path, options = {}) {
+  const BASE_URL = "http://127.0.0.1:8000";
+  const fullPath = `${BASE_URL}${path}`;
+  const requestKey = `${fullPath}-${options.method || "GET"}`;
+
+  if (requestLoading.has(requestKey)) return;
+  requestLoading.add(requestKey);
+
+   try {
+    const headers = new Headers(options.headers || {});
+    const isFormData = options.body instanceof FormData;
+    if (!isFormData && options.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  const response = await fetch(fullpath, {
     credentials: "include",
     ...options,
     headers,
   });
+  clearTimeout(timeoutId);
+
+  return payload;
+  } catch (error) {
+    // 区分错误类型：网络错误/超时/业务错误
+    if (error.name === "AbortError") {
+      throw new Error("请求超时，请检查网络或重试");
+    } else if (!navigator.onLine) {
+      throw new Error("网络已断开，请检查网络连接");
+    } else {
+      throw new Error(error.message || "网络请求失败，请重试");
+    }
+  } finally {
+    requestLoading.delete(requestKey);
+  }
+}
 
   if (response.status === 204) {
     return null;
-  }
-
-  const contentType = response.headers.get("content-type") || "";
-  const payload = contentType.includes("application/json")
-    ? await response.json()
-    : await response.text();
-
-  if (!response.ok) {
-    const detail = payload && typeof payload === "object" ? payload.detail : payload;
-    throw new Error(detail || "请求失败");
-  }
-
-  return payload;
 }
+
+const contentType = response.headers.get("content-type") || "";
+let payload;
+
+if (contentType.includes("application/json")) {
+    try {
+        payload = await response.json();
+    } catch {
+        payload = await response.text();
+    }
+} else {
+    payload = await response.text();
+}
+
+if (!response.ok) {
+    let errorMessage;
+    if (payload && typeof payload === "object") {
+        errorMessage = payload.detail || payload.message || JSON.stringify(payload);
+    } else if (typeof payload === "string") {
+        errorMessage = payload.length > 200 ? payload.substring(0, 200) + "..." : payload;
+    } else {
+        errorMessage = "请求失败";
+    }
+    throw new Error(errorMessage);
+}
+
+return payload;
+
 
 function toggleAuthMode() {
   state.isRegister = !state.isRegister;
@@ -174,6 +230,27 @@ function resetCourseForm() {
   els.courseWeekType.value = "all";
   els.courseFormTitle.textContent = "手动录入课程";
   els.btnCancelEdit.classList.add("hidden");
+}
+
+function validateCourseForm() {
+  const errors = [];
+  const name = els.courseName.value.trim();
+  const start = Number(els.courseStart.value);
+  const end = Number(els.courseEnd.value);
+  const weekday = Number(els.courseWeekday.value);
+  const semesterStart = els.inputSemesterStart.value;
+
+  if (!name) errors.push("课程名称不能为空");
+  if (start > end) errors.push("开始节次不能大于结束节次");
+  if (start < 1 || end > 12) errors.push("节次范围必须在 1-12 之间");
+  if (weekday < 1 || weekday > 7) errors.push("星期必须在 1-7 之间");
+  if (semesterStart && !/^\d{4}-\d{2}-\d{2}$/.test(semesterStart)) {
+    errors.push("开学日期格式必须为 YYYY-MM-DD");
+  }
+
+  if (errors.length) {
+    throw new Error(errors.join("；"));
+  }
 }
 
 function startEditCourse(course) {
@@ -409,6 +486,8 @@ async function enterAppView() {
 
 async function saveScheduleMeta() {
   try {
+    validateCourseForm();
+    
     state.schedule = await api("/schedule", {
       method: "POST",
       body: JSON.stringify({
@@ -503,6 +582,8 @@ async function submitCourseForm(event) {
   event.preventDefault();
 
   try {
+    validateCourseForm();
+
     const wasEditing = Boolean(state.editingCourseId);
     const payload = {
       name: els.courseName.value.trim(),
