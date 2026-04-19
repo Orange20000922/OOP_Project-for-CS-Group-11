@@ -94,7 +94,7 @@ async function api(path, options = {}) {
   if (requestLoading.has(requestKey)) return;
   requestLoading.add(requestKey);
 
-   try {
+  try {
     const headers = new Headers(options.headers || {});
     const isFormData = options.body instanceof FormData;
     if (!isFormData && options.body && !headers.has("Content-Type")) {
@@ -103,16 +103,47 @@ async function api(path, options = {}) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-  const response = await fetch(fullpath, {
-    credentials: "include",
-    ...options,
-    headers,
-  });
-  clearTimeout(timeoutId);
+    const response = await fetch(fullPath, {
+      credentials: "include",
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
 
-  return payload;
+    if (response.status === 204) {
+      return null;
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    let payload;
+
+    if (contentType.includes("application/json")) {
+      try {
+        payload = await response.json();
+      } catch {
+        payload = await response.text();
+      }
+    } else {
+      payload = await response.text();
+    }
+
+    if (!response.ok) {
+      let errorMessage;
+      if (payload && typeof payload === "object") {
+        errorMessage = payload.detail || payload.message || JSON.stringify(payload);
+      } else if (typeof payload === "string") {
+        errorMessage = payload.length > 200 ? payload.substring(0, 200) + "..." : payload;
+      } else {
+        errorMessage = "请求失败";
+      }
+      throw new Error(errorMessage);
+    }
+
+    return payload;
+
   } catch (error) {
-    // 区分错误类型：网络错误/超时/业务错误
+
     if (error.name === "AbortError") {
       throw new Error("请求超时，请检查网络或重试");
     } else if (!navigator.onLine) {
@@ -487,7 +518,7 @@ async function enterAppView() {
 async function saveScheduleMeta() {
   try {
     validateCourseForm();
-    
+
     state.schedule = await api("/schedule", {
       method: "POST",
       body: JSON.stringify({
