@@ -1,3 +1,4 @@
+const BASE_URL = "http://127.0.0.1:8000";
 const DASHBOARD_PATH = "/dashboard.html";
 
 const state = {
@@ -32,7 +33,7 @@ async function api(path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(path, {
+  const response = await fetch(`${BASE_URL}${path}`, {
     credentials: "include",
     ...options,
     headers,
@@ -70,6 +71,7 @@ function toggleAuthMode() {
 }
 
 async function submitAuth() {
+  els.authSubmit.disabled = true;
   const studentId = els.inputSid.value.trim();
   const password = els.inputPwd.value;
   const name = els.inputName.value.trim();
@@ -77,6 +79,13 @@ async function submitAuth() {
 
   if (!studentId || !password) {
     setMessage(els.authMessage, "请填写学号和密码", "error");
+    els.authSubmit.disabled = false;
+    return;
+  }
+
+  if (password.length < 6) {
+    setMessage(els.authMessage, "密码长度不能少于6位", "error");
+    els.authSubmit.disabled = false;
     return;
   }
 
@@ -84,9 +93,10 @@ async function submitAuth() {
     if (state.isRegister) {
       if (!name) {
         setMessage(els.authMessage, "注册时需要填写姓名", "error");
+        els.authSubmit.disabled = false;
         return;
       }
-      await api("/auth/register", {
+      await api("/api/auth/register", {
         method: "POST",
         body: JSON.stringify({
           student_id: studentId,
@@ -95,15 +105,20 @@ async function submitAuth() {
           scnu_account: scnuAccount || null,
         }),
       });
+      setMessage(els.authMessage, "注册成功，请登录！", "success");
+      toggleAuthMode();
     }
 
-    await api("/auth/login", {
+    const loginRes = await api("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ student_id: studentId, password }),
     });
+    localStorage.setItem("token", loginRes.token);
     redirectToDashboard();
   } catch (error) {
     setMessage(els.authMessage, error.message, "error");
+  } finally {
+    els.authSubmit.disabled = false;
   }
 }
 
@@ -112,7 +127,7 @@ async function bootstrap() {
   els.authSubmit.onclick = submitAuth;
 
   try {
-    await api("/auth/me");
+    await api("/api/auth/me");
     redirectToDashboard();
   } catch {
     setMessage(els.authMessage, "");
