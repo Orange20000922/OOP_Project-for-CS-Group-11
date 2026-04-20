@@ -8,7 +8,7 @@ const state = {
   fetchPollTimer: null,
 };
 
-const requestLoading = new Set(); 
+
 
 const els = {
   authView: document.getElementById("view-auth"),
@@ -88,6 +88,21 @@ function withLoading(button, fn) {
 }
 
 
+function withLoading(button, fn) {
+  return async (...args) => {
+    if (button.disabled) return;
+    button.disabled = true;
+    button.textContent = "处理中...";
+    try {
+      await fn(...args);
+    } finally {
+      button.disabled = false;
+      button.textContent = button.dataset.text;
+     }
+  };
+}
+
+const requestLoading = new Set();
 async function api(path, options = {}) {
   const BASE_URL = "http://127.0.0.1:8000";
   const fullPath = `${BASE_URL}${path}`;
