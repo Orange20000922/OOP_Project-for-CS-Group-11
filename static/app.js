@@ -8,6 +8,8 @@ const state = {
   fetchPollTimer: null,
 };
 
+const requestLoading = new Set(); 
+
 const els = {
   authView: document.getElementById("view-auth"),
   appView: document.getElementById("view-app"),
@@ -85,7 +87,7 @@ function withLoading(button, fn) {
   };
 }
 
-const requestLoading = new Set();
+
 async function api(path, options = {}) {
   const BASE_URL = "http://127.0.0.1:8000";
   const fullPath = `${BASE_URL}${path}`;
@@ -94,12 +96,16 @@ async function api(path, options = {}) {
   if (requestLoading.has(requestKey)) return;
   requestLoading.add(requestKey);
 
+  const requestId = Symbol(path + Date.now());
+  requestLoading.add(requestId); 
+
   try {
     const headers = new Headers(options.headers || {});
     const isFormData = options.body instanceof FormData;
     if (!isFormData && options.body && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
@@ -116,28 +122,13 @@ async function api(path, options = {}) {
     }
 
     const contentType = response.headers.get("content-type") || "";
-    let payload;
-
-    if (contentType.includes("application/json")) {
-      try {
-        payload = await response.json();
-      } catch {
-        payload = await response.text();
-      }
-    } else {
-      payload = await response.text();
-    }
+    const payload = contentType.includes("application/json")
+      ? await response.json()
+      : await response.text();
 
     if (!response.ok) {
-      let errorMessage;
-      if (payload && typeof payload === "object") {
-        errorMessage = payload.detail || payload.message || JSON.stringify(payload);
-      } else if (typeof payload === "string") {
-        errorMessage = payload.length > 200 ? payload.substring(0, 200) + "..." : payload;
-      } else {
-        errorMessage = "请求失败";
-      }
-      throw new Error(errorMessage);
+      const detail = payload && typeof payload === "object" ? payload.detail : payload;
+      throw new Error(detail || "请求失败");
     }
 
     return payload;
@@ -153,6 +144,7 @@ async function api(path, options = {}) {
     }
   } finally {
     requestLoading.delete(requestKey);
+    requestLoading.delete(requestId);
   }
 }
 
@@ -670,6 +662,12 @@ function bindEvents() {
 
 async function bootstrap() {
   bindEvents();
+
+  window.addEventListener("beforeunload", () => {
+    stopFetchPolling(); 
+    requestLoading.clear(); 
+  });
+
   resetCourseForm();
   renderEmptyTable();
   renderCourseList();
