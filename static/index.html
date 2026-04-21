@@ -20,28 +20,35 @@
       <div class="panel auth-panel">
         <h2 id="auth-title">登录</h2>
         <p class="subtle">本地账号负责管理课表数据。教务系统账号只在你主动触发抓取时使用。</p>
-        <div class="field-grid">
-          <label class="field hidden" id="field-name">
-            <span>姓名</span>
-            <input id="input-name" placeholder="真实姓名" type="text" />
-          </label>
-          <label class="field hidden" id="field-scnu-account">
-            <span>教务账号（可选）</span>
-            <input id="input-scnu-account" placeholder="默认使用学号" type="text" />
-          </label>
-          <label class="field">
-            <span>学号</span>
-            <input id="input-sid" placeholder="请输入学号" type="text" />
-          </label>
-          <label class="field">
-            <span>密码</span>
-            <input id="input-pwd" placeholder="请输入密码" type="password" />
-          </label>
-        </div>
-        <div class="button-row" style="margin-top: 24px;">
-          <button class="button" id="btn-submit-auth" type="button">登录并进入工作台</button>
-          <button class="button secondary" id="btn-toggle-auth" type="button">没有账号？去注册</button>
-        </div>
+        
+        <form id="auth-form" action="#" method="post">
+          <div class="field-grid">
+            <label class="field hidden" id="field-name">
+              <span>姓名</span>
+              <input id="input-name" placeholder="真实姓名" type="text" name="name" />
+            </label>
+            <label class="field hidden" id="field-scnu-account">
+              <span>教务账号（可选）</span>
+              <input id="input-scnu-account" placeholder="默认使用学号" type="text" name="scnuAccount" />
+            </label>
+            <label class="field">
+              <span>学号</span>
+              <input id="input-sid" placeholder="请输入学号" type="text" name="sid" required />
+            </label>
+            <label class="field">
+              <span>密码</span>
+              <input id="input-pwd" placeholder="请输入密码" type="password" name="pwd" required />
+            </label>
+          </div>
+
+          <div class="button-row" style="margin-top: 24px;">
+            <button class="button" id="btn-submit-auth" type="button">登录并进入工作台</button>
+            <button class="button secondary" id="btn-toggle-auth" type="button">没有账号？去注册</button>
+            <button class="button tertiary" id="btn-save-draft" type="submit">
+              保存草稿（暂存数据）
+            </button>
+          </div>
+        </form>
         <div class="message" id="auth-message"></div>
       </div>
     </section>

@@ -5,6 +5,74 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>课表工作台 | 学生课表管理系统</title>
   <link rel="stylesheet" href="/style.css" />
+  <style>
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal {
+      background: white;
+      padding: 2rem;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 600px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .modal.active { display: flex; }
+    .tag-input-group {
+      margin: 1rem 0;
+    }
+    .tags-list {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin: 0.5rem 0;
+    }
+    .tag-item {
+      background: #e5e7eb;
+      padding: 0.25rem 0.75rem;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .tag-remove {
+      cursor: pointer;
+      color: #6b7280;
+      font-weight: bold;
+    }
+    .tag-remove:hover { color: #ef4444; }
+    .form-row { margin: 1rem 0; }
+    label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+    input, select, textarea {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+    }
+    .button {
+      padding: 0.75rem 1.5rem;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+    }
+    .button.primary { background: #2563eb; color: white; }
+    .button.secondary { background: #f3f4f6; color: #111827; }
+  </style>
 </head>
 <body>
   <header class="topbar">
@@ -30,6 +98,7 @@
               <h2>工作台主区域</h2>
               <p class="subtle">预留给课表渲染、当前课程、周切换等主功能。</p>
             </div>
+            <button class="button primary" id="btn-edit-course">编辑课程</button>
           </div>
           <div class="now-card" id="workspace-placeholder">
             页面壳子已就绪。队友可以在此挂载课表组件，并通过 `window.scheduleDashboard.api(...)` 调后端接口。
@@ -61,8 +130,120 @@
         </aside>
       </div>
     </section>
+
+    <div class="modal-overlay" id="course-edit-modal">
+      <div class="modal">
+        <h2>编辑课程信息</h2>
+        <div class="form-row">
+          <label for="course-name">课程名称</label>
+          <input type="text" id="course-name" placeholder="请输入课程名称" />
+        </div>
+        <div class="form-row">
+          <label for="course-teacher">授课老师</label>
+          <input type="text" id="course-teacher" placeholder="请输入授课老师" />
+        </div>
+        <div class="form-row tag-input-group">
+          <label>课程分类/标签</label>
+          <input type="text" id="tag-input" placeholder="输入标签后按回车添加（如：必修课、专业课）" />
+          <div class="tags-list" id="tags-list"></div>
+          <small class="helper">支持添加多个标签，点击标签右侧×可删除</small>
+        </div>
+        <div class="modal-actions">
+          <button class="button secondary" id="modal-cancel">取消</button>
+          <button class="button primary" id="modal-save">保存课程</button>
+        </div>
+      </div>
+    </div>
   </main>
 
   <script defer src="/dashboard.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const modal = document.getElementById('course-edit-modal');
+      const btnEditCourse = document.getElementById('btn-edit-course');
+      const btnModalCancel = document.getElementById('modal-cancel');
+      const btnModalSave = document.getElementById('modal-save');
+      const tagInput = document.getElementById('tag-input');
+      const tagsList = document.getElementById('tags-list');
+      const setGlobalMessage = window.scheduleDashboard?.setGlobalMessage || (() => {});
+      const api = window.scheduleDashboard?.api || (() => {});
+
+      let courseTags = [];
+
+      const openModal = () => {
+        modal.style.display = 'flex';
+        tagInput.value = '';
+        courseTags = [];
+        renderTags();
+      };
+      const closeModal = () => {
+        modal.style.display = 'none';
+      };
+
+      const renderTags = () => {
+        tagsList.innerHTML = '';
+        courseTags.forEach(tag => {
+          const tagItem = document.createElement('div');
+          tagItem.className = 'tag-item';
+          tagItem.innerHTML = `
+            <span>${tag}</span>
+            <span class="tag-remove" data-tag="${tag}">×</span>
+          `;
+          tagsList.appendChild(tagItem);
+        });
+      };
+
+      tagInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && tagInput.value.trim()) {
+          const newTag = tagInput.value.trim();
+          if (!courseTags.includes(newTag)) {
+            courseTags.push(newTag);
+            renderTags();
+          }
+          tagInput.value = '';
+        }
+      });
+
+      tagsList.addEventListener('click', (e) => {
+        if (e.target.classList.contains('tag-remove')) {
+          const removeTag = e.target.dataset.tag;
+          courseTags = courseTags.filter(tag => tag !== removeTag);
+          renderTags();
+        }
+      });
+
+      const saveCourse = async () => {
+        const courseName = document.getElementById('course-name').value.trim();
+        const courseTeacher = document.getElementById('course-teacher').value.trim();
+        
+        if (!courseName) {
+          setGlobalMessage('课程名称不能为空', 'error');
+          return;
+        }
+
+        try {
+          const res = await api('/schedule/course', {
+            method: 'POST', 
+            body: JSON.stringify({
+              name: courseName,
+              teacher: courseTeacher,
+              tags: courseTags, 
+              student_id: window.scheduleDashboard?.user?.student_id 
+            })
+          });
+          setGlobalMessage('课程编辑成功（含标签：' + courseTags.join(', ') + '）', 'success');
+          closeModal();
+        } catch (err) {
+          setGlobalMessage('课程保存失败：' + err.message, 'error');
+        }
+      };
+      btnEditCourse.addEventListener('click', openModal);
+      btnModalCancel.addEventListener('click', closeModal);
+      btnModalSave.addEventListener('click', saveCourse);
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+      });
+    });
+  </script>
 </body>
 </html>
