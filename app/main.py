@@ -17,7 +17,7 @@ from app.config import (
 )
 from app.logging_config import configure_logging, logger
 from app.routers import auth, knowledge, note, query, schedule
-from app.services import auth_service
+from app.services import auth_service, shutdown_services
 
 configure_logging()
 
@@ -33,7 +33,10 @@ async def lifespan(app: FastAPI):
         USERS_FILE.write_text('{"users": []}', encoding="utf-8")
         logger.info("Initialized empty user store at {}", USERS_FILE)
     logger.info("Application startup completed; logs will be written to {}", APP_LOG_FILE)
-    yield
+    try:
+        yield
+    finally:
+        shutdown_services()
     logger.info("Application shutdown completed")
 
 
@@ -60,7 +63,7 @@ async def login_page(session_token: str | None = Cookie(None, alias=SESSION_COOK
     try:
         auth_service.get_student_id(session_token)
     except PermissionError:
-        return FileResponse(STATIC_DIR / "login_v2.html")
+        return FileResponse(STATIC_DIR / "index.html")
     return RedirectResponse(url="/dashboard", status_code=307)
 
 
@@ -70,7 +73,7 @@ async def dashboard_page(session_token: str | None = Cookie(None, alias=SESSION_
         auth_service.get_student_id(session_token)
     except PermissionError:
         return RedirectResponse(url="/login", status_code=307)
-    return FileResponse(STATIC_DIR / "dashboard_v2.html")
+    return FileResponse(STATIC_DIR / "dashboard.html")
 
 
 @app.get("/knowledge-workspace", include_in_schema=False)

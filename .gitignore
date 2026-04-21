@@ -9,9 +9,11 @@ __pycache__/
 *.py[cod]
 *.pyo
 .pytest_cache/
+pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .pytest*/
+.hf_cache/
 # Runtime data
 data/users.json
 data/schedules/*.json
@@ -24,7 +26,7 @@ logs/
 .tmp*/
 # Local test scripts
 test/
-
+.e2e*/
 # Editor settings
 .vscode/
 

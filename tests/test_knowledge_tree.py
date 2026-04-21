@@ -14,7 +14,7 @@ def make_service(tmp_path):
     note_store = NoteStore(db_path=tmp_path / "notes.db")
     tree_store = KnowledgeTreeStore(root_dir=tmp_path / "knowledge_trees")
     service = KnowledgeService(note_store, tree_store=tree_store)
-    service._topic_memory = MagicMock()
+    service._topic_store = MagicMock()
     return service, note_store
 
 
@@ -98,15 +98,13 @@ def test_build_graph_routes_by_query_to_topic_candidates(tmp_path):
     service.assign_note_to_topic("stu1", "c1", topic_a, "n1")
     service.assign_note_to_topic("stu1", "c1", topic_b, "n2")
 
-    mock_topic_memory = MagicMock()
-    mock_topic_memory.search.return_value = [
-        {"score": 0.92, "metadata": {"topic_id": topic_b, "course_id": "c1"}},
-    ]
+    mock_topic_store = MagicMock()
+    mock_topic_store.search_topics.return_value = [(topic_b, 0.92)]
     mock_memory = MagicMock()
     mock_memory.search.return_value = [
         {"memory": "derived class", "score": 1.0, "metadata": {"chunk_id": "c2", "note_id": "n2", "heading": "Inheritance"}},
     ]
-    service._topic_memory = mock_topic_memory
+    service._topic_store = mock_topic_store
     service._memory = mock_memory
 
     graph = service.build_graph(
@@ -125,7 +123,7 @@ def test_build_graph_routes_by_query_to_topic_candidates(tmp_path):
     assert {node.id for node in graph.nodes} == {"c2"}
     assert graph.nodes[0].topic_id == topic_b
     assert graph.total_links == 0
-    assert mock_topic_memory.search.call_count == 1
+    assert mock_topic_store.search_topics.call_count == 1
     assert mock_memory.search.call_count == 1
 
 

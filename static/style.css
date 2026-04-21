@@ -348,6 +348,12 @@ select {
   line-height: 1.5;
 }
 
+.course-card-link {
+  display: inline-flex;
+  margin-top: 8px;
+  text-decoration: none;
+}
+
 .course-list {
   display: flex;
   flex-direction: column;

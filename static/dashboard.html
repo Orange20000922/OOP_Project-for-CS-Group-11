@@ -1,249 +1,278 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>课表工作台 | 学生课表管理系统</title>
-  <link rel="stylesheet" href="/style.css" />
-  <style>
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.5);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-    .modal {
-      background: white;
-      padding: 2rem;
-      border-radius: 8px;
-      width: 90%;
-      max-width: 600px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    .modal.active { display: flex; }
-    .tag-input-group {
-      margin: 1rem 0;
-    }
-    .tags-list {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      margin: 0.5rem 0;
-    }
-    .tag-item {
-      background: #e5e7eb;
-      padding: 0.25rem 0.75rem;
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    .tag-remove {
-      cursor: pointer;
-      color: #6b7280;
-      font-weight: bold;
-    }
-    .tag-remove:hover { color: #ef4444; }
-    .form-row { margin: 1rem 0; }
-    label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
-    input, select, textarea {
-      width: 100%;
-      padding: 0.75rem;
-      border: 1px solid #d1d5db;
-      border-radius: 4px;
-    }
-    .modal-actions {
-      display: flex;
-      gap: 1rem;
-      justify-content: flex-end;
-      margin-top: 1.5rem;
-    }
-    .button {
-      padding: 0.75rem 1.5rem;
-      border-radius: 4px;
-      border: none;
-      cursor: pointer;
-    }
-    .button.primary { background: #2563eb; color: white; }
-    .button.secondary { background: #f3f4f6; color: #111827; }
-  </style>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/vue.css">
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <p class="eyebrow">SCNU Schedule Workspace</p>
-      <h1>课表工作台</h1>
-      <p class="subtle">这里先保留页面壳子、登录态守卫和后端 API 调用入口，具体业务展示可继续扩展。</p>
-    </div>
-    <div class="topbar-meta">
-      <span id="header-user"></span>
-      <button class="button secondary" id="btn-logout" type="button">退出登录</button>
-    </div>
-  </header>
+  <div id="dashboard-app" v-cloak>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">SCNU Schedule Workspace</p>
+        <h1>课表工作台</h1>
+        <p class="subtle">现有静态逻辑已迁移到 Vue2 状态管理，后续笔记与图谱模块可直接继续挂接。</p>
+      </div>
+      <div class="topbar-meta">
+        <span v-if="user">{{ user.name }}（{{ user.student_id }}）</span>
+        <button class="button secondary" type="button" @click="logout">退出登录</button>
+      </div>
+    </header>
 
-  <main class="page">
-    <section class="app-shell">
-      <div class="status-banner" id="global-message">正在验证登录状态。</div>
+    <main class="page">
+      <section class="app-shell">
+        <div :class="statusClass">{{ statusText }}</div>
 
-      <div class="layout">
-        <section class="panel workspace stack">
-          <div class="section-header">
-            <div>
-              <h2>工作台主区域</h2>
-              <p class="subtle">预留给课表渲染、当前课程、周切换等主功能。</p>
-            </div>
-            <button class="button primary" id="btn-edit-course">编辑课程</button>
-          </div>
-          <div class="now-card" id="workspace-placeholder">
-            页面壳子已就绪。队友可以在此挂载课表组件，并通过 `window.scheduleDashboard.api(...)` 调后端接口。
-          </div>
-        </section>
-
-        <aside class="side-column">
+        <div class="layout">
           <section class="panel workspace stack">
             <div class="section-header">
-              <h3>保留区</h3>
+              <div>
+                <h2>本周课表</h2>
+                <p class="subtle">左侧保留课表主视图，右侧负责初始化、导入和课程维护。</p>
+              </div>
             </div>
-            <p class="helper">建议在这里继续接入学期信息、文件上传、手动录课、教务抓取等入口。</p>
-            <div id="sidebar-placeholder" class="helper">当前仅提供结构占位，不绑定具体业务逻辑。</div>
+
+            <div class="card-grid">
+              <article class="now-card">
+                <h3>当前课程</h3>
+                <template v-if="currentCourse">
+                  <strong>{{ currentCourse.name }}</strong>
+                  <div>{{ currentCourse.teacher || "未填写教师" }} | {{ currentCourse.location || "未填写地点" }}</div>
+                  <div>{{ weekdayLabel(currentCourse.weekday) }} 第{{ currentCourse.period_start }}-{{ currentCourse.period_end }}节</div>
+                  <div class="button-row">
+                    <a class="button ghost small" :href="knowledgeWorkspaceUrl(currentCourse.id)">进入知识工作台</a>
+                  </div>
+                </template>
+                <template v-else-if="hasSchedule">
+                  <div>当前时间段没有课程。</div>
+                </template>
+                <template v-else>
+                  <div>请先初始化学期并录入课表。</div>
+                </template>
+              </article>
+
+              <article class="now-card secondary-card">
+                <h3>今日课程</h3>
+                <div v-if="todayCourses.length" class="mini-course-list">
+                  <div v-for="course in todayCourses" :key="course.id" class="mini-course-item">
+                    <strong>{{ course.name }}</strong>
+                    <span>{{ courseSummary(course) }}</span>
+                    <a class="button ghost small mini-course-link" :href="knowledgeWorkspaceUrl(course.id)">进入知识工作台</a>
+                  </div>
+                </div>
+                <div v-else class="helper">今天暂无课程，或学期尚未初始化。</div>
+              </article>
+            </div>
+
+            <div class="toolbar">
+              <div class="week-title">{{ weekLabel }}</div>
+              <div class="button-row">
+                <button class="button secondary small" type="button" @click="changeWeek(-1)">上一周</button>
+                <button class="button secondary small" type="button" @click="changeWeek(1)">下一周</button>
+              </div>
+            </div>
+
+            <div class="table-wrap" v-if="hasSchedule">
+              <table class="timetable">
+                <thead>
+                  <tr>
+                    <th>节次</th>
+                    <th>周一</th>
+                    <th>周二</th>
+                    <th>周三</th>
+                    <th>周四</th>
+                    <th>周五</th>
+                    <th>周六</th>
+                    <th>周日</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in timetableRows" :key="row.period">
+                    <td class="period-label">第{{ row.period }}节</td>
+                    <template v-for="cell in row.cells">
+                      <td v-if="!cell.skip && cell.empty" :key="cell.key"></td>
+                      <td v-else-if="!cell.skip" :key="cell.key" :rowspan="cell.rowspan">
+                        <div class="course-card">
+                          <strong>{{ cell.course.name }}</strong>
+                          <span>{{ cell.course.teacher || "未填写教师" }}</span>
+                          <span>{{ cell.course.location || "未填写地点" }}</span>
+                          <span>周次 {{ formatWeeks(cell.course.weeks) }}</span>
+                          <a class="button ghost small course-card-link" :href="knowledgeWorkspaceUrl(cell.course.id)">知识工作台</a>
+                        </div>
+                      </td>
+                    </template>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else class="empty-panel">
+              学期尚未初始化。先在右侧填写学期信息，再导入或手动录课。
+            </div>
           </section>
 
-          <section class="panel workspace stack">
-            <div class="section-header">
-              <h3>可用接口</h3>
-            </div>
-            <div class="helper">`/auth/me`</div>
-            <div class="helper">`/schedule`</div>
-            <div class="helper">`/schedule/upload`</div>
-            <div class="helper">`/schedule/fetch`</div>
-            <div class="helper">`/schedule/course`</div>
-            <div class="helper">`/query/now`</div>
-            <div class="helper">`/query/today`</div>
-            <div class="helper">`/query/week`</div>
-          </section>
-        </aside>
-      </div>
-    </section>
+          <aside class="side-column">
+            <section class="panel workspace stack">
+              <div class="section-header">
+                <div>
+                  <h3>学期与导入</h3>
+                  <p class="subtle">保留原有初始化、文件导入和教务抓取能力。</p>
+                </div>
+              </div>
 
-    <div class="modal-overlay" id="course-edit-modal">
-      <div class="modal">
-        <h2>编辑课程信息</h2>
-        <div class="form-row">
-          <label for="course-name">课程名称</label>
-          <input type="text" id="course-name" placeholder="请输入课程名称" />
+              <div class="field-grid">
+                <label class="field">
+                  <span>学期</span>
+                  <input v-model.trim="semesterForm.semester" type="text" placeholder="例如 2025-2026-2">
+                </label>
+                <label class="field">
+                  <span>开学日期</span>
+                  <input v-model="semesterForm.semesterStart" type="date">
+                </label>
+              </div>
+
+              <div class="button-row">
+                <button class="button" type="button" @click="saveScheduleMeta">保存学期信息</button>
+              </div>
+
+              <div class="field-grid compact-grid">
+                <label class="field">
+                  <span>导入课表文件</span>
+                  <input ref="scheduleFileInput" type="file" accept=".json,.pdf">
+                </label>
+              </div>
+              <div class="button-row">
+                <button class="button secondary" type="button" @click="uploadScheduleFile">上传 JSON / PDF</button>
+              </div>
+
+              <div class="field-grid compact-grid">
+                <label class="field">
+                  <span>统一身份认证登录账号（默认当前学号）</span>
+                  <input v-model.trim="fetchForm.account" type="text" placeholder="通常与学号一致，不填则默认使用学号">
+                </label>
+                <label class="field">
+                  <span>统一身份认证密码</span>
+                  <input v-model="fetchForm.password" type="password" placeholder="抓取前必填">
+                </label>
+                <label class="field">
+                  <span>目标学期</span>
+                  <input v-model.trim="fetchForm.semesterId" type="text" placeholder="默认使用当前学期">
+                </label>
+                <label class="checkbox">
+                  <input v-model="fetchForm.preferPlaywright" type="checkbox">
+                  <span>优先尝试 Playwright 登录</span>
+                </label>
+              </div>
+
+              <div class="button-row">
+                <button class="button secondary" type="button" @click="submitFetchTask">通过统一身份认证抓取课表</button>
+              </div>
+              <div class="helper" v-if="fetchStatusText">{{ fetchStatusText }}</div>
+            </section>
+
+            <section class="panel workspace stack">
+              <div class="section-header">
+                <div>
+                  <h3>课程管理</h3>
+                  <p class="subtle">共 {{ courseCount }} 门课程，可直接编辑或删除。</p>
+                </div>
+              </div>
+
+              <div class="course-list" v-if="sortedCourses.length">
+                <article v-for="course in sortedCourses" :key="course.id" class="course-item">
+                  <h4>{{ course.name }}</h4>
+                  <div class="course-meta">
+                    <div>{{ course.teacher || "未填写教师" }} | {{ course.location || "未填写地点" }}</div>
+                    <div>{{ courseSummary(course) }}</div>
+                  </div>
+                  <div class="button-row">
+                    <a class="button ghost small" :href="knowledgeWorkspaceUrl(course.id)">知识工作台</a>
+                    <button class="button secondary small" type="button" @click="startEditCourse(course)">编辑</button>
+                    <button class="button danger small" type="button" @click="deleteCourse(course)">删除</button>
+                  </div>
+                </article>
+              </div>
+              <div v-else class="helper">当前还没有课程，可以手动录入或导入文件。</div>
+            </section>
+
+            <section class="panel workspace stack">
+              <div class="section-header">
+                <div>
+                  <h3>{{ editingCourseId ? "编辑课程" : "手动录课" }}</h3>
+                  <p class="subtle">保留原先的课程 CRUD 流程，但改成响应式表单。</p>
+                </div>
+              </div>
+
+              <form class="stack" @submit.prevent="submitCourseForm">
+                <div class="field-grid">
+                  <label class="field">
+                    <span>课程名</span>
+                    <input v-model.trim="courseForm.name" type="text" required>
+                  </label>
+                  <label class="field">
+                    <span>教师</span>
+                    <input v-model.trim="courseForm.teacher" type="text">
+                  </label>
+                  <label class="field">
+                    <span>地点</span>
+                    <input v-model.trim="courseForm.location" type="text">
+                  </label>
+                </div>
+
+                <div class="inline-grid">
+                  <label class="field">
+                    <span>星期</span>
+                    <select v-model.number="courseForm.weekday">
+                      <option :value="1">周一</option>
+                      <option :value="2">周二</option>
+                      <option :value="3">周三</option>
+                      <option :value="4">周四</option>
+                      <option :value="5">周五</option>
+                      <option :value="6">周六</option>
+                      <option :value="7">周日</option>
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>周类型</span>
+                    <select v-model="courseForm.weekType">
+                      <option value="all">全周</option>
+                      <option value="odd">单周</option>
+                      <option value="even">双周</option>
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>开始节次</span>
+                    <input v-model.number="courseForm.periodStart" type="number" min="1" max="12">
+                  </label>
+
+                  <label class="field">
+                    <span>结束节次</span>
+                    <input v-model.number="courseForm.periodEnd" type="number" min="1" max="12">
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span>周次</span>
+                  <input v-model.trim="courseForm.weeks" type="text" placeholder="例如 1-4,6,8">
+                </label>
+
+                <div class="button-row">
+                  <button class="button" type="submit">{{ editingCourseId ? "保存修改" : "新增课程" }}</button>
+                  <button class="button secondary" type="button" @click="resetCourseForm" v-if="editingCourseId">取消编辑</button>
+                </div>
+              </form>
+            </section>
+          </aside>
         </div>
-        <div class="form-row">
-          <label for="course-teacher">授课老师</label>
-          <input type="text" id="course-teacher" placeholder="请输入授课老师" />
-        </div>
-        <div class="form-row tag-input-group">
-          <label>课程分类/标签</label>
-          <input type="text" id="tag-input" placeholder="输入标签后按回车添加（如：必修课、专业课）" />
-          <div class="tags-list" id="tags-list"></div>
-          <small class="helper">支持添加多个标签，点击标签右侧×可删除</small>
-        </div>
-        <div class="modal-actions">
-          <button class="button secondary" id="modal-cancel">取消</button>
-          <button class="button primary" id="modal-save">保存课程</button>
-        </div>
-      </div>
-    </div>
-  </main>
+      </section>
+    </main>
+  </div>
 
-  <script defer src="/dashboard.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const modal = document.getElementById('course-edit-modal');
-      const btnEditCourse = document.getElementById('btn-edit-course');
-      const btnModalCancel = document.getElementById('modal-cancel');
-      const btnModalSave = document.getElementById('modal-save');
-      const tagInput = document.getElementById('tag-input');
-      const tagsList = document.getElementById('tags-list');
-      const setGlobalMessage = window.scheduleDashboard?.setGlobalMessage || (() => {});
-      const api = window.scheduleDashboard?.api || (() => {});
-
-      let courseTags = [];
-
-      const openModal = () => {
-        modal.style.display = 'flex';
-        tagInput.value = '';
-        courseTags = [];
-        renderTags();
-      };
-      const closeModal = () => {
-        modal.style.display = 'none';
-      };
-
-      const renderTags = () => {
-        tagsList.innerHTML = '';
-        courseTags.forEach(tag => {
-          const tagItem = document.createElement('div');
-          tagItem.className = 'tag-item';
-          tagItem.innerHTML = `
-            <span>${tag}</span>
-            <span class="tag-remove" data-tag="${tag}">×</span>
-          `;
-          tagsList.appendChild(tagItem);
-        });
-      };
-
-      tagInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && tagInput.value.trim()) {
-          const newTag = tagInput.value.trim();
-          if (!courseTags.includes(newTag)) {
-            courseTags.push(newTag);
-            renderTags();
-          }
-          tagInput.value = '';
-        }
-      });
-
-      tagsList.addEventListener('click', (e) => {
-        if (e.target.classList.contains('tag-remove')) {
-          const removeTag = e.target.dataset.tag;
-          courseTags = courseTags.filter(tag => tag !== removeTag);
-          renderTags();
-        }
-      });
-
-      const saveCourse = async () => {
-        const courseName = document.getElementById('course-name').value.trim();
-        const courseTeacher = document.getElementById('course-teacher').value.trim();
-        
-        if (!courseName) {
-          setGlobalMessage('课程名称不能为空', 'error');
-          return;
-        }
-
-        try {
-          const res = await api('/schedule/course', {
-            method: 'POST', 
-            body: JSON.stringify({
-              name: courseName,
-              teacher: courseTeacher,
-              tags: courseTags, 
-              student_id: window.scheduleDashboard?.user?.student_id 
-            })
-          });
-          setGlobalMessage('课程编辑成功（含标签：' + courseTags.join(', ') + '）', 'success');
-          closeModal();
-        } catch (err) {
-          setGlobalMessage('课程保存失败：' + err.message, 'error');
-        }
-      };
-      btnEditCourse.addEventListener('click', openModal);
-      btnModalCancel.addEventListener('click', closeModal);
-      btnModalSave.addEventListener('click', saveCourse);
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) closeModal();
-      });
-    });
-  </script>
+  <script defer src="/vendor/vue/vue.js"></script>
+  <script defer src="/static/shared.js"></script>
+  <script defer src="/static/dashboard-vue.js"></script>
 </body>
 </html>

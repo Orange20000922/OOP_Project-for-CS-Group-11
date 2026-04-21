@@ -50,10 +50,15 @@ OOP_project/                     # 项目根目录
 │   └── schedules/
 │       └── {student_id}.json    # 每个用户的课表
 │
-├── static/                      # 前端（纯 HTML/CSS/JS 单页面）
-│   ├── index.html
+├── static/                      # 前端页面（登录页 + 课表工作台 + 知识工作台）
+│   ├── index.html               # /login，登录/注册入口
+│   ├── dashboard.html           # /dashboard，课表工作台
+│   ├── knowledge_workspace.html # /knowledge-workspace，笔记/知识图谱工作台
 │   ├── style.css
-│   └── app.js
+│   ├── vue.css
+│   ├── auth-vue.js
+│   ├── dashboard-vue.js
+│   └── knowledge-workspace.js
 │
 └── requirements.txt
 ```
@@ -163,7 +168,7 @@ class User:
 |------|------|------|
 | GET  | `/schedule` | 获取完整课表（JSON） |
 | POST | `/schedule/upload` | 上传 JSON 课表文件（手动回退路径） |
-| POST | `/schedule/fetch` | 触发 SCNU 强智 API 抓取任务（进入任务队列） |
+| POST | `/schedule/fetch` | 触发统一身份认证课表抓取任务（进入任务队列） |
 | POST | `/schedule/course` | 手动新增单门课程 |
 | PUT  | `/schedule/course/{id}` | 修改某门课程 |
 | DELETE | `/schedule/course/{id}` | 删除某门课程 |
@@ -172,6 +177,7 @@ class User:
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| GET | `/query/overview` | 工作台总览（用户 + 当前课表 + 当前课 + 今日课程 + 指定周课表） |
 | GET | `/query/now` | 当前节次正在上的课（BST 查找） |
 | GET | `/query/today` | 今天全部课程（双向链表遍历当天节点） |
 | GET | `/query/week` | 本周课表 |
@@ -309,21 +315,32 @@ def parse_pdf_schedule(pdf_path: str) -> list[Course]:
 
 ---
 
-## 前端结构（单页面）
+## 前端结构（多页面）
 
 ```
-index.html
-  ├── 视图 1：登录/注册面板
-  ├── 视图 2：周课表格（7列 × 12节）
-  └── 视图 3：当前课程信息卡片
+/login
+  └─ static/index.html
+      └─ Vue2 登录/注册面板（本地账号 + 可选统一身份认证账号）
+
+/dashboard
+  └─ static/dashboard.html
+      ├─ 当前课程卡片
+      ├─ 今日课程列表
+      ├─ 周课表格（7列 × 12节）
+      ├─ 学期初始化 / 文件导入 / 统一身份认证抓取
+      └─ 课程 CRUD 表单
+
+/knowledge-workspace
+  └─ static/knowledge_workspace.html
+      └─ 课程笔记、知识聚类、图谱等工作区
 
 核心交互流程：
-  1. 页面加载 → 检查 Cookie → 若有则直接进入课表视图
-  2. 登录成功 → GET /query/week → 渲染周课表格
-  3. 顶部实时显示 GET /query/now → "现在：面向对象程序设计 / 理工楼 A101"
-  4. 前/后周导航按钮 → GET /query/week/{offset}
-  5. 上传按钮 → <input type="file"> → POST /schedule/upload
-  6. "从教务系统抓取"按钮 → 弹出教务密码输入 → POST /schedule/fetch
+  1. 页面加载 → `/login` 检查 Cookie → 已登录则重定向到 `/dashboard`
+  2. `/dashboard` 加载 → GET `/query/overview` → 同步用户、课表、当前课程、今日课程、本周课表
+  3. 周导航按钮 → GET `/query/overview?week_offset={offset}` → 重渲染工作台
+  4. 上传按钮 → `<input type="file">` → POST `/schedule/upload`
+  5. “通过统一身份认证抓取课表”按钮 → POST `/schedule/fetch`
+  6. 课程卡片 / 当前课程 / 今日课程可跳转 `/knowledge-workspace?course_id=...`
 ```
 
 ---

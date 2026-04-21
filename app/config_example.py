@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -10,7 +11,24 @@ STATIC_DIR = BASE_DIR / "static"
 NOTES_DB_PATH = DATA_DIR / "notes.db"
 NOTE_FILES_DIR = DATA_DIR / "note_files"
 QDRANT_DB_DIR = DATA_DIR / "qdrant_db"
+HF_CACHE_DIR = BASE_DIR / ".hf_cache"
+HF_HUB_CACHE_DIR = HF_CACHE_DIR / "hub"
+TRANSFORMERS_CACHE_DIR = HF_CACHE_DIR / "transformers"
+SENTENCE_TRANSFORMERS_CACHE_DIR = HF_CACHE_DIR / "sentence_transformers"
 LOG_LEVEL = "INFO"
+
+HF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+HF_HUB_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+TRANSFORMERS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+SENTENCE_TRANSFORMERS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+os.environ.setdefault("HF_HOME", str(HF_CACHE_DIR))
+os.environ.setdefault("HF_HUB_CACHE", str(HF_HUB_CACHE_DIR))
+os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(HF_HUB_CACHE_DIR))
+os.environ.setdefault("TRANSFORMERS_CACHE", str(TRANSFORMERS_CACHE_DIR))
+os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(SENTENCE_TRANSFORMERS_CACHE_DIR))
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 # DeepSeek LLM
 DEEPSEEK_API_KEY = ""

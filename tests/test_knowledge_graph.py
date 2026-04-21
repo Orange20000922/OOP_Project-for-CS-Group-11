@@ -131,6 +131,78 @@ def test_build_graph_respects_max_nodes(
     assert graph.total_links == 1
 
 
+def test_build_graph_returns_empty_without_memory_when_no_notes(
+    knowledge_service: KnowledgeService,
+):
+    knowledge_service._memory_failed = True
+
+    graph = knowledge_service.build_graph(
+        student_id="stu1",
+        course_id="c1",
+        top_k=2,
+        min_score=0.5,
+        max_nodes=10,
+    )
+
+    assert isinstance(graph, GraphResponse)
+    assert graph.total_nodes == 0
+    assert graph.total_links == 0
+    assert graph.nodes == []
+    assert graph.links == []
+
+
+def test_build_graph_falls_back_to_lexical_links_without_memory(
+    knowledge_service: KnowledgeService,
+    note_store: NoteStore,
+):
+    note_store.add_note(
+        Note(
+            id="n1",
+            student_id="stu1",
+            course_id="c1",
+            filename="logic.docx",
+            file_type="docx",
+            title="命题逻辑",
+            created_at="2026-04-16T10:00:00",
+            updated_at="2026-04-16T10:00:00",
+        )
+    )
+    note_store.add_chunks(
+        [
+            NoteChunk(
+                chunk_id="c1",
+                note_id="n1",
+                heading="真值表",
+                content="真值表用于分析命题公式的真假情况",
+                chunk_index=0,
+            ),
+            NoteChunk(
+                chunk_id="c2",
+                note_id="n1",
+                heading="等值演算",
+                content="等值演算和真值表都可以判断命题公式是否等价",
+                chunk_index=1,
+            ),
+        ]
+    )
+    knowledge_service._memory_failed = True
+
+    graph = knowledge_service.build_graph(
+        student_id="stu1",
+        course_id="c1",
+        top_k=1,
+        min_score=0.2,
+        max_nodes=10,
+    )
+
+    assert isinstance(graph, GraphResponse)
+    assert graph.total_nodes == 2
+    assert {node.id for node in graph.nodes} == {"c1", "c2"}
+    assert graph.total_links == 1
+    assert graph.links[0].source == "c1"
+    assert graph.links[0].target == "c2"
+
+
 def test_graph_endpoint_returns_graph(monkeypatch: pytest.MonkeyPatch, tmp_path):
     pytest.importorskip("fastapi.testclient")
     from fastapi.testclient import TestClient

@@ -71,10 +71,42 @@ class TestSearch:
         assert results[0].note_title == "OOP笔记"
         assert results[0].chunk.heading == "多态"
 
-    def test_search_fails_without_memory(self, knowledge_service: KnowledgeService):
+    def test_search_falls_back_to_lexical_matching_without_memory(
+        self,
+        knowledge_service: KnowledgeService,
+        note_store: NoteStore,
+    ):
+        note_store.add_note(
+            Note(
+                id="n1",
+                student_id="stu1",
+                course_id="c1",
+                filename="discrete.docx",
+                file_type="docx",
+                title="命题逻辑",
+                created_at="2026-01-01",
+                updated_at="2026-01-01",
+            )
+        )
+        note_store.add_chunks(
+            [
+                NoteChunk(
+                    chunk_id="c1",
+                    note_id="n1",
+                    heading="真值表",
+                    content="真值表用于分析命题公式的真假情况",
+                    chunk_index=0,
+                )
+            ]
+        )
         knowledge_service._memory_failed = True
-        with pytest.raises(RuntimeError, match="不可用"):
-            knowledge_service.search("stu1", "query")
+
+        results = knowledge_service.search("stu1", "真值表", course_id="c1")
+
+        assert len(results) == 1
+        assert results[0].chunk.chunk_id == "c1"
+        assert results[0].note_title == "命题逻辑"
+        assert results[0].score > 0
 
 
 class TestAsk:
@@ -152,3 +184,22 @@ class TestGenerateSummary:
         result = knowledge_service.generate_summary(sample_chunks)
         assert result["title"] == ""
         assert "这不是JSON" in result["summary"]
+
+
+class TestShutdown:
+    def test_close_releases_resources(self, knowledge_service: KnowledgeService):
+        mock_memory = MagicMock()
+        mock_topic_store = MagicMock()
+        mock_llm = MagicMock()
+        knowledge_service._memory = mock_memory
+        knowledge_service._topic_store = mock_topic_store
+        knowledge_service._llm_client = mock_llm
+
+        knowledge_service.close()
+
+        mock_memory.close.assert_called_once()
+        mock_topic_store.close.assert_called_once()
+        mock_llm.close.assert_called_once()
+        assert knowledge_service._memory is None
+        assert knowledge_service._topic_store is None
+        assert knowledge_service._llm_client is None

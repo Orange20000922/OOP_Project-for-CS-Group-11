@@ -24,6 +24,7 @@ from app.models.note import (
 )
 from app.storage.knowledge_tree_store import KnowledgeTreeStore
 from app.storage.note_store import NoteStore
+from app.services.topic_vector_store import TopicVectorStore
 
 # 这个模块负责处理与笔记聚类相关的功能，包括向量索引、语义搜索、RAG 和图谱构建等。
 
@@ -39,18 +40,50 @@ class KnowledgeService:
         self._tree_store = tree_store or KnowledgeTreeStore()
         self._memory: Any | None = None
         self._memory_failed = False
-        self._topic_memory: Any | None = None
-        self._topic_memory_failed = False
+        self._topic_store: Any | None = None
+        self._topic_store_failed = False
         self._llm_client: Any | None = None
         self._llm_failed = False
 
+    def _close_resource(self, resource: Any, label: str) -> None:
+        if resource is None:
+            return
+
+        close_fn = getattr(resource, "close", None)
+        if close_fn is None:
+            return
+
+        try:
+            close_fn()
+            logger.info("Closed {}", label)
+        except Exception as exc:
+            logger.warning("Failed to close {}: {}", label, exc)
+
+    def close(self) -> None:
+        self._close_resource(self._memory, "chunk memory")
+        self._memory = None
+
+        topic_store = self._topic_store
+        self._topic_store = None
+        if topic_store is not None:
+            try:
+                topic_store.close()
+                logger.info("Closed topic vector store")
+            except Exception as exc:
+                logger.warning("Failed to close topic vector store: {}", exc)
+
+        self._close_resource(self._llm_client, "LLM client")
+        self._llm_client = None
+
     def _build_memory_config(self, collection_name: str) -> dict[str, Any]:
+        store_dir = QDRANT_DB_DIR / collection_name
+        store_dir.mkdir(parents=True, exist_ok=True)
         return {
             "vector_store": {
                 "provider": "qdrant",
                 "config": {
                     "collection_name": collection_name,
-                    "path": str(QDRANT_DB_DIR),
+                    "path": str(store_dir),
                     "embedding_model_dims": 384,
                     "on_disk": True,
                 },
@@ -84,18 +117,16 @@ class KnowledgeService:
             logger.error("Failed to initialize chunk memory: {}", exc)
             self._memory_failed = True
 
-    def _ensure_topic_memory(self) -> None:
-        if self._topic_memory is not None or self._topic_memory_failed:
+    def _ensure_topic_store(self) -> None:
+        if self._topic_store is not None or self._topic_store_failed:
             return
         try:
-            from mem0 import Memory
-
             QDRANT_DB_DIR.mkdir(parents=True, exist_ok=True)
-            self._topic_memory = Memory.from_config(self._build_memory_config("course_note_topics"))
-            logger.info("Topic memory initialized at {}", QDRANT_DB_DIR)
+            self._topic_store = TopicVectorStore()
+            logger.info("Topic vector store initialized at {}", QDRANT_DB_DIR)
         except Exception as exc:
-            logger.warning("Failed to initialize topic memory: {}", exc)
-            self._topic_memory_failed = True
+            logger.warning("Failed to initialize topic vector store: {}", exc)
+            self._topic_store_failed = True
 
     def _ensure_llm(self) -> None:
         if self._llm_client is not None or self._llm_failed:
@@ -237,38 +268,33 @@ class KnowledgeService:
         topic = tree.topics.get(topic_id)
         if topic is None:
             return
-        self._ensure_topic_memory()
-        if self._topic_memory is None:
+        self._ensure_topic_store()
+        if self._topic_store is None:
             return
 
         notes_by_id = self._notes_by_id(student_id, course_id)
         payload = self._topic_text(topic, notes_by_id).strip()
         try:
-            self._topic_memory.delete_all(
-                user_id=student_id,
-                metadata={"topic_id": topic_id},
-            )
-        except Exception:
-            pass
+            self._topic_store.delete_topic(student_id, course_id, topic_id)
+        except Exception as exc:
+            logger.warning("Failed to delete stale topic vector for {}: {}", topic_id, exc)
         if not payload:
             return
 
-        self._topic_memory.add(
-            messages=[{"role": "user", "content": payload}],
-            user_id=student_id,
-            metadata={
-                "topic_id": topic.id,
-                "course_id": course_id or "",
-                "topic_name": topic.name,
-            },
+        self._topic_store.upsert_topic(
+            student_id=student_id,
+            course_id=course_id,
+            topic_id=topic.id,
+            topic_name=topic.name,
+            text=payload,
         )
 
-    def _delete_topic_vector(self, student_id: str, topic_id: str) -> None:
-        self._ensure_topic_memory()
-        if self._topic_memory is None:
+    def _delete_topic_vector(self, student_id: str, course_id: str | None, topic_id: str) -> None:
+        self._ensure_topic_store()
+        if self._topic_store is None:
             return
         try:
-            self._topic_memory.delete_all(user_id=student_id, metadata={"topic_id": topic_id})
+            self._topic_store.delete_topic(student_id, course_id, topic_id)
         except Exception as exc:
             logger.warning("Failed to delete topic vector for {}: {}", topic_id, exc)
 
@@ -373,7 +399,7 @@ class KnowledgeService:
 
         del tree.topics[topic_id]
         self._save_tree(tree)
-        self._delete_topic_vector(student_id, topic_id)
+        self._delete_topic_vector(student_id, tree.course_id, topic_id)
         for touched_topic_id in touched_topic_ids:
             self._reindex_topic(student_id, tree.course_id, tree, touched_topic_id)
         return tree
@@ -453,30 +479,21 @@ class KnowledgeService:
         query: str,
         limit: int,
     ) -> list[tuple[str, float]]:
-        self._ensure_topic_memory()
-        if self._topic_memory is None:
+        self._ensure_topic_store()
+        if self._topic_store is None:
             return []
 
-        raw_results = self._topic_memory.search(
+        ranked = self._topic_store.search_topics(
+            student_id=student_id,
+            course_id=tree.course_id,
             query=query,
-            user_id=student_id,
-            limit=max(limit * 4, 10),
+            limit=limit,
         )
-        scores: dict[str, float] = {}
-        course_marker = tree.course_id or ""
-        for item in raw_results:
-            metadata = item.get("metadata") or {}
-            topic_id = str(metadata.get("topic_id", ""))
-            if not topic_id or topic_id not in tree.topics:
-                continue
-            if str(metadata.get("course_id", "")) != course_marker:
-                continue
-            score = float(item.get("score", 0.0) or 0.0)
-            current = scores.get(topic_id)
-            if current is None or score > current:
-                scores[topic_id] = score
-
-        return sorted(scores.items(), key=lambda item: (-item[1], item[0]))[:limit]
+        return [
+            (topic_id, score)
+            for topic_id, score in ranked
+            if topic_id in tree.topics
+        ]
 
     def _rank_topics_lexically(
         self,
@@ -616,6 +633,88 @@ class KnowledgeService:
             content_preview=preview,
         )
 
+    def _chunk_search_text(self, chunk: NoteChunk, note_title: str = "") -> str:
+        parts = [chunk.heading.strip(), note_title.strip(), chunk.content.strip()]
+        return "\n".join(part for part in parts if part)
+
+    def _search_lexically(
+        self,
+        student_id: str,
+        query: str,
+        limit: int,
+        course_id: str | None = None,
+    ) -> list[SearchResult]:
+        notes = self._note_store.list_by_student(student_id, course_id)
+        if not notes:
+            return []
+
+        note_titles = {
+            note.id: (note.title.strip() or note.filename)
+            for note in notes
+        }
+        scored_chunks: list[tuple[float, NoteChunk]] = []
+        for chunk in self._note_store.list_chunks_by_student(student_id, course_id):
+            if not chunk.content.strip():
+                continue
+            score = self._lexical_similarity(
+                query,
+                self._chunk_search_text(chunk, note_titles.get(chunk.note_id, "")),
+            )
+            if score <= 0:
+                continue
+            scored_chunks.append((score, chunk))
+
+        scored_chunks.sort(
+            key=lambda item: (-item[0], item[1].note_id, item[1].chunk_index, item[1].chunk_id)
+        )
+        return [
+            SearchResult(
+                chunk=chunk,
+                score=score,
+                note_title=note_titles.get(chunk.note_id, ""),
+            )
+            for score, chunk in scored_chunks[:limit]
+        ]
+
+    def _build_graph_links_lexically(
+        self,
+        candidate_chunks: list[NoteChunk],
+        top_k: int,
+        min_score: float,
+    ) -> list[GraphLink]:
+        chunk_texts = {
+            chunk.chunk_id: self._chunk_search_text(chunk)
+            for chunk in candidate_chunks
+        }
+        edge_map: dict[tuple[str, str], GraphLink] = {}
+
+        for chunk in candidate_chunks:
+            scored_neighbors: list[tuple[float, str]] = []
+            query_text = chunk_texts.get(chunk.chunk_id, "")
+            for neighbor in candidate_chunks:
+                if neighbor.chunk_id == chunk.chunk_id:
+                    continue
+                score = self._lexical_similarity(
+                    query_text,
+                    chunk_texts.get(neighbor.chunk_id, ""),
+                )
+                if score < min_score:
+                    continue
+                scored_neighbors.append((score, neighbor.chunk_id))
+
+            scored_neighbors.sort(key=lambda item: (-item[0], item[1]))
+            for score, neighbor_id in scored_neighbors[:top_k]:
+                source, target = sorted((chunk.chunk_id, neighbor_id))
+                key = (source, target)
+                current = edge_map.get(key)
+                if current is None or score > current.value:
+                    edge_map[key] = GraphLink(source=source, target=target, value=score)
+
+        return sorted(
+            edge_map.values(),
+            key=lambda link: (-link.value, link.source, link.target),
+        )
+
     def index_chunks(self, student_id: str, chunks: list[NoteChunk]) -> int:
         memory = self._require_memory()
 
@@ -657,7 +756,16 @@ class KnowledgeService:
         limit: int = 10,
         course_id: str | None = None,
     ) -> list[SearchResult]:
-        memory = self._require_memory()
+        self._ensure_memory()
+        if self._memory is None:
+            logger.warning(
+                "Chunk memory unavailable; falling back to lexical search for {} (course_id={})",
+                student_id,
+                course_id,
+            )
+            return self._search_lexically(student_id, query, limit, course_id)
+
+        memory = self._memory
 
         allowed_note_ids: set[str] | None = None
         fetch_limit = max(limit, 1)
@@ -727,8 +835,6 @@ class KnowledgeService:
         topic_id: str | None = None,
         topic_limit: int = 3,
     ) -> GraphResponse:
-        memory = self._require_memory()
-
         notes = self._note_store.list_by_student(student_id, course_id)
         if not notes:
             return GraphResponse(
@@ -797,48 +903,57 @@ class KnowledgeService:
                 truncated=truncated,
             )
 
-        search_limit = max(
-            top_k + 1,
-            min(len(all_course_chunks) + 1, max(len(candidate_chunks) * 4, 20)),
-        )
-        edge_map: dict[tuple[str, str], GraphLink] = {}
-
-        for chunk in candidate_chunks:
-            kept_neighbors = 0
-            results = memory.search(
-                query=chunk.content,
-                user_id=student_id,
-                limit=search_limit,
+        self._ensure_memory()
+        if self._memory is None:
+            logger.warning(
+                "Chunk memory unavailable; falling back to lexical graph links for {} (course_id={})",
+                student_id,
+                course_id,
             )
+            links = self._build_graph_links_lexically(candidate_chunks, top_k, min_score)
+        else:
+            search_limit = max(
+                top_k + 1,
+                min(len(all_course_chunks) + 1, max(len(candidate_chunks) * 4, 20)),
+            )
+            edge_map: dict[tuple[str, str], GraphLink] = {}
 
-            for item in results:
-                metadata = item.get("metadata") or {}
-                neighbor_id = str(metadata.get("chunk_id", ""))
-                if (
-                    not neighbor_id
-                    or neighbor_id == chunk.chunk_id
-                    or neighbor_id not in allowed_chunk_ids
-                ):
-                    continue
+            for chunk in candidate_chunks:
+                kept_neighbors = 0
+                results = self._memory.search(
+                    query=chunk.content,
+                    user_id=student_id,
+                    limit=search_limit,
+                )
 
-                score = float(item.get("score", 0.0) or 0.0)
-                if score < min_score:
-                    continue
+                for item in results:
+                    metadata = item.get("metadata") or {}
+                    neighbor_id = str(metadata.get("chunk_id", ""))
+                    if (
+                        not neighbor_id
+                        or neighbor_id == chunk.chunk_id
+                        or neighbor_id not in allowed_chunk_ids
+                    ):
+                        continue
 
-                source, target = sorted((chunk.chunk_id, neighbor_id))
-                key = (source, target)
-                current = edge_map.get(key)
-                if current is None or score > current.value:
-                    edge_map[key] = GraphLink(source=source, target=target, value=score)
+                    score = float(item.get("score", 0.0) or 0.0)
+                    if score < min_score:
+                        continue
 
-                kept_neighbors += 1
-                if kept_neighbors >= top_k:
-                    break
+                    source, target = sorted((chunk.chunk_id, neighbor_id))
+                    key = (source, target)
+                    current = edge_map.get(key)
+                    if current is None or score > current.value:
+                        edge_map[key] = GraphLink(source=source, target=target, value=score)
 
-        links = sorted(
-            edge_map.values(),
-            key=lambda link: (-link.value, link.source, link.target),
-        )
+                    kept_neighbors += 1
+                    if kept_neighbors >= top_k:
+                        break
+
+            links = sorted(
+                edge_map.values(),
+                key=lambda link: (-link.value, link.source, link.target),
+            )
         graph = GraphResponse(
             nodes=nodes,
             links=links,

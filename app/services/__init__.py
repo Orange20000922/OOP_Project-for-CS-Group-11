@@ -3,6 +3,7 @@ from app.services.knowledge_service import KnowledgeService
 from app.services.note_service import NoteService
 from app.services.schedule_service import ScheduleService
 from app.services.scnu_scraper import SCNUScraper
+from app.logging_config import logger
 from app.storage.note_store import NoteStore
 from app.storage.schedule_store import ScheduleStore
 from app.storage.user_store import UserStore
@@ -15,3 +16,10 @@ auth_service = AuthService(user_store)
 schedule_service = ScheduleService(schedule_store, scnu_scraper)
 note_service = NoteService(note_store)
 knowledge_service = KnowledgeService(note_store)
+
+
+def shutdown_services() -> None:
+    try:
+        knowledge_service.close()
+    except Exception as exc:
+        logger.warning("Failed to shutdown services cleanly: {}", exc)

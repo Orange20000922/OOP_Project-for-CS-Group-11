@@ -740,13 +740,8 @@
       setActiveTopic: function setActiveTopic(topicId) {
         this.activeTopicId = topicId || "";
         this.syncTopicEditForm();
-
-        if (this.selectedNoteId && !this.isCurrentSelectionVisible()) {
-          if (this.visibleNotes.length) {
-            this.openNote(this.visibleNotes[0].id, { force: true, silentStatus: true });
-          } else {
-            this.clearSelectedNote();
-          }
+        if (!this.selectedNoteId && this.visibleNotes.length) {
+          this.openNote(this.visibleNotes[0].id, { force: true, silentStatus: true });
         }
       },
       clearActiveTopic: function clearActiveTopic() {

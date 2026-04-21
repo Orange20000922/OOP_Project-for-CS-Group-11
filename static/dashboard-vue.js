@@ -180,7 +180,11 @@ new Vue({
       return `/knowledge-workspace?course_id=${encodeURIComponent(courseId)}`;
     },
     parseWeeksInput(raw) {
-      const parts = raw
+      const normalized = raw
+        .replace(/[，、；;]/g, ",")
+        .replace(/[－–—~～]/g, "-");
+
+      const parts = normalized
         .split(",")
         .map(function (item) {
           return item.trim();
@@ -301,7 +305,7 @@ new Vue({
     },
     async submitFetchTask() {
       if (!this.fetchForm.password) {
-        this.setStatus("抓取前需要填写教务系统密码", "error");
+        this.setStatus("抓取前需要填写统一身份认证密码", "error");
         return;
       }
 

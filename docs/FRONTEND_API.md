@@ -8,10 +8,12 @@
 
 - 登录页：`/login`
 - 工作台页：`/dashboard`
+- 知识工作台页：`/knowledge-workspace`
 - 根路径 `/` 会重定向到 `/login`
 - 前端登录成功后，应跳转到 `/dashboard`
 - 若用户已登录，再访问 `/login`，后端会重定向到 `/dashboard`
 - 若用户未登录却直接访问 `/dashboard`，后端会重定向到 `/login`
+- 若用户未登录却直接访问 `/knowledge-workspace`，后端也会重定向到 `/login`
 - 静态资源通过 `/static/...` 暴露，例如 `/static/style.css`
 
 ### 1.1 基础说明
@@ -97,7 +99,33 @@ fetch("/auth/me", {
 }
 ```
 
-### 2.4 FetchTaskStatus
+### 2.4 DashboardOverview
+
+```json
+{
+  "user": {
+    "student_id": "20250001",
+    "name": "张三",
+    "scnu_account": "20250001"
+  },
+  "schedule": null,
+  "current_course": null,
+  "today_courses": [],
+  "week_courses": {
+    "1": [],
+    "2": [],
+    "3": [],
+    "4": [],
+    "5": [],
+    "6": [],
+    "7": []
+  },
+  "week_offset": 0,
+  "has_schedule": false
+}
+```
+
+### 2.5 FetchTaskStatus
 
 ```json
 {
@@ -142,7 +170,7 @@ fetch("/auth/me", {
 - `student_id`: 本地系统学号
 - `name`: 姓名
 - `password`: 本地登录密码
-- `scnu_account`: 可选，SCNU 教务账号；不传时默认使用 `student_id`
+- `scnu_account`: 可选，统一身份认证登录账号，通常与学号一致；不传时默认使用 `student_id`
 
 成功返回：
 
@@ -316,7 +344,7 @@ JSON 上传说明：
 ]
 ```
 
-### 4.4 发起 SCNU 教务抓取任务
+### 4.4 发起统一身份认证课表抓取任务
 
 - URL: `/schedule/fetch`
 - Method: `POST`
@@ -336,10 +364,10 @@ JSON 上传说明：
 
 字段说明：
 
-- `scnu_password`: 必填，SCNU 教务密码
-- `scnu_account`: 可选，不传时默认使用当前用户学号
+- `scnu_password`: 必填，统一身份认证密码
+- `scnu_account`: 可选，统一身份认证登录账号；通常与学号一致，不传时默认使用当前用户学号
 - `semester_id`: 可选，不传时默认使用当前课表的 `semester`
-- `prefer_playwright`: 可选，`true` 表示优先走 Playwright SSO 回退路径
+- `prefer_playwright`: 可选，`true` 表示优先走 Playwright 统一身份认证回退路径
 
 成功返回：
 
@@ -452,7 +480,27 @@ JSON 上传说明：
 
 ## 5. 查询接口 `/query`
 
-### 5.1 查询当前正在上的课程
+### 5.1 查询工作台总览
+
+- URL: `/query/overview`
+- Method: `GET`
+- 是否需要登录: 是
+- 功能: 一次性返回当前用户、课表、当前课程、今日课程和指定周课表，供工作台和知识工作台初始化使用
+
+查询参数：
+
+- `week_offset`: 可选，整数，默认 `0`
+
+成功返回：
+
+- 状态码: `200`
+- 返回体: `DashboardOverview`
+
+失败：
+
+- `401`: 未登录
+
+### 5.2 查询当前正在上的课程
 
 - URL: `/query/now`
 - Method: `GET`
@@ -473,7 +521,7 @@ JSON 上传说明：
 - `401`: 未登录
 - `404`: 课表未初始化
 
-### 5.2 查询今天所有课程
+### 5.3 查询今天所有课程
 
 - URL: `/query/today`
 - Method: `GET`
@@ -490,7 +538,7 @@ JSON 上传说明：
 - `401`: 未登录
 - `404`: 课表未初始化
 
-### 5.3 查询本周课表
+### 5.4 查询本周课表
 
 - URL: `/query/week`
 - Method: `GET`
@@ -524,7 +572,7 @@ JSON 上传说明：
 - `401`: 未登录
 - `404`: 课表未初始化
 
-### 5.4 查询指定周偏移课表
+### 5.5 查询指定周偏移课表
 
 - URL: `/query/week/{offset}`
 - Method: `GET`
@@ -554,21 +602,22 @@ JSON 上传说明：
 
 1. 调用 `/auth/me`
 2. 若返回 `200`，进入应用页
-3. 再调用 `/schedule`
-4. 若课表存在，继续调用 `/query/week` 和 `/query/now`
+3. 再调用 `/query/overview`
+4. 若课表存在，再按需刷新 `/query/week`、`/query/week/{offset}` 或 `/query/now`
 
 ### 6.2 注册/登录
 
 1. 注册时先调用 `/auth/register`
 2. 成功后调用 `/auth/login`
-3. 登录成功后调用 `/schedule` 判断是否已初始化学期
+3. 登录成功后调用 `/query/overview` 判断是否已初始化学期
 
-### 6.3 从教务系统抓取课表
+### 6.3 从统一身份认证抓取课表
 
 1. 调用 `/schedule/fetch`
 2. 获取 `task_id`
 3. 每隔 2~3 秒轮询 `/schedule/fetch/{task_id}`
 4. 当 `status = succeeded` 时刷新 `/schedule` 与 `/query/week`
+5. 当前前端可以直接复用登录用户的学号作为 `scnu_account`，通常无需重复填写
 
 ## 7. 当前前端实际使用到的接口
 
@@ -578,6 +627,7 @@ JSON 上传说明：
 - `/auth/login`
 - `/auth/logout`
 - `/auth/me`
+- `/query/overview`
 - `/schedule`
 - `/schedule/upload`
 - `/schedule/fetch`

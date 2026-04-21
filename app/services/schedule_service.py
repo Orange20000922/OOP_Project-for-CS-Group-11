@@ -23,7 +23,7 @@ from app.storage.file_io import model_to_dict
 from app.storage.schedule_store import ScheduleStore
 from app.services.scnu_scraper import SCNUScraper
 
-
+# 课表服务：提供课表管理、当前课程查询、以及与教务系统交互的功能
 class ScheduleService:
     def __init__(self, schedule_store: ScheduleStore, scnu_scraper: SCNUScraper) -> None:
         self._schedule_store = schedule_store
@@ -148,7 +148,7 @@ class ScheduleService:
             week_offset=week_offset,
             has_schedule=True,
         )
-
+    # 教务系统抓取：提交抓取任务，异步执行，并提供状态查询接口
     def submit_scnu_fetch(self, student_id: str, payload: SCNUFetchRequest) -> FetchTaskStatus:
         now = self._now_iso()
         task = FetchTaskStatus(
@@ -182,7 +182,7 @@ class ScheduleService:
             logger.warning("Requested missing fetch task {}", task_id)
             raise ValueError("未找到抓取任务")
         return task
-
+    # 内部方法：执行教务系统抓取任务，更新任务状态，并处理结果或错误
     def _run_fetch_task(self, task_id: str, student_id: str, payload: SCNUFetchRequest) -> None:
         self._update_task(task_id, status="running", message="正在连接教务系统")
         try:

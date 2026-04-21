@@ -1,21 +1,27 @@
-from task_queue import Queue
+from app.core.queue import Queue
 
-q = Queue()
 
-print("初始状态:", q)
+def main() -> None:
+    q = Queue()
 
-q.enqueue("任务1")
-q.enqueue("任务2")
+    print("初始状态:", q)
 
-print("入队后:", q)
-print("队头元素:", q.peek())
+    q.enqueue("任务1")
+    q.enqueue("任务2")
 
-print("出队:", q.dequeue())
-print("出队:", q.dequeue())
+    print("入队后:", q)
+    print("队头元素:", q.peek())
 
-print("最终状态:", q)
+    print("出队:", q.dequeue())
+    print("出队:", q.dequeue())
 
-try:
-    q.dequeue()
-except IndexError as e:
-    print("捕获异常成功:", e)
+    print("最终状态:", q)
+
+    try:
+        q.dequeue()
+    except IndexError as exc:
+        print("捕获异常成功:", exc)
+
+
+if __name__ == "__main__":
+    main()

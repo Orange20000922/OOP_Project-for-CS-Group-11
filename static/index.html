@@ -1,59 +1,70 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>登录 | 学生课表管理系统</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/vue.css">
 </head>
 <body>
   <header class="topbar">
     <div>
       <p class="eyebrow">SCNU Schedule Workspace</p>
       <h1>学生课表管理系统</h1>
-      <p class="subtle">登录成功后会跳转到独立的课表工作台页面。</p>
+      <p class="subtle">本页使用 Vue2 维护登录与注册状态，登录后跳转到课表工作台。</p>
     </div>
   </header>
 
   <main class="page">
-    <section class="auth-shell" id="view-auth">
-      <div class="panel auth-panel">
-        <h2 id="auth-title">登录</h2>
-        <p class="subtle">本地账号负责管理课表数据。教务系统账号只在你主动触发抓取时使用。</p>
-        
-        <form id="auth-form" action="#" method="post">
-          <div class="field-grid">
-            <label class="field hidden" id="field-name">
-              <span>姓名</span>
-              <input id="input-name" placeholder="真实姓名" type="text" name="name" />
-            </label>
-            <label class="field hidden" id="field-scnu-account">
-              <span>教务账号（可选）</span>
-              <input id="input-scnu-account" placeholder="默认使用学号" type="text" name="scnuAccount" />
-            </label>
-            <label class="field">
-              <span>学号</span>
-              <input id="input-sid" placeholder="请输入学号" type="text" name="sid" required />
-            </label>
-            <label class="field">
-              <span>密码</span>
-              <input id="input-pwd" placeholder="请输入密码" type="password" name="pwd" required />
-            </label>
-          </div>
+    <section class="auth-shell">
+      <div class="panel auth-panel" id="auth-app" v-cloak>
+        <h2>{{ panelTitle }}</h2>
+        <p class="subtle">本地账号仅用于管理课表与笔记；统一身份认证登录账号通常与学号一致，抓取课表时如不单独填写将默认直接使用学号。</p>
 
-          <div class="button-row" style="margin-top: 24px;">
-            <button class="button" id="btn-submit-auth" type="button">登录并进入工作台</button>
-            <button class="button secondary" id="btn-toggle-auth" type="button">没有账号？去注册</button>
-            <button class="button tertiary" id="btn-save-draft" type="submit">
-              保存草稿（暂存数据）
-            </button>
-          </div>
-        </form>
-        <div class="message" id="auth-message"></div>
+        <div class="field-grid">
+          <label class="field" v-if="isRegister">
+            <span>姓名</span>
+            <input v-model.trim="form.name" type="text" placeholder="请输入真实姓名">
+          </label>
+
+          <label class="field" v-if="isRegister">
+            <span>统一身份认证登录账号（可选，默认使用学号）</span>
+            <input v-model.trim="form.scnuAccount" type="text" placeholder="通常与学号一致，不填则默认使用学号">
+          </label>
+
+          <label class="field">
+            <span>学号</span>
+            <input v-model.trim="form.studentId" type="text" placeholder="请输入学号">
+          </label>
+
+          <label class="field">
+            <span>密码</span>
+            <input
+              v-model="form.password"
+              type="password"
+              placeholder="请输入密码"
+              @keyup.enter="submit"
+            >
+          </label>
+        </div>
+
+        <div class="button-row auth-actions">
+          <button class="button" type="button" :disabled="loading" @click="submit">
+            {{ loading ? "提交中..." : submitLabel }}
+          </button>
+          <button class="button secondary" type="button" :disabled="loading" @click="toggleMode">
+            {{ toggleLabel }}
+          </button>
+        </div>
+
+        <div :class="messageClass">{{ messageText }}</div>
       </div>
     </section>
   </main>
 
-  <script defer src="/static/auth.js"></script>
+  <script defer src="/vendor/vue/vue.js"></script>
+  <script defer src="/static/shared.js"></script>
+  <script defer src="/static/auth-vue.js"></script>
 </body>
 </html>

@@ -11,10 +11,16 @@ if (-not $scriptPath) {
 }
 
 $repoRoot = Split-Path -Parent (Resolve-Path -LiteralPath $scriptPath)
-$targetPattern = '^[._](pytest|tmp).*$'
+$targetPatterns = @(
+    '^[._](pytest|tmp).*$'
+    '^pytest-cache-files-.*$'
+)
 
 $targets = Get-ChildItem -LiteralPath $repoRoot -Directory -Force |
-    Where-Object { $_.Name -match $targetPattern } |
+    Where-Object {
+        $name = $_.Name
+        $targetPatterns | Where-Object { $name -match $_ }
+    } |
     Sort-Object -Property Name -Unique
 
 if (-not $targets -or $targets.Count -eq 0) {

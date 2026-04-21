@@ -97,7 +97,7 @@ OOP_project/
 | GET | `/schedule` | 获取完整课表 | 无 | Schedule 对象 |
 | POST | `/schedule` | 初始化学期 | `{"semester": "2025-2026-2", "semester_start": "2026-02-24"}` | Schedule 对象 |
 | POST | `/schedule/upload` | 上传课表文件 | JSON 或 PDF 文件 | Schedule 对象 |
-| POST | `/schedule/fetch` | 从教务系统抓取 | `{"scnu_password": "密码"}` | `{"task_id": "...", "status": "queued"}` |
+| POST | `/schedule/fetch` | 通过统一身份认证抓取课表 | `{"scnu_password": "统一身份认证密码", "scnu_account": "学号（可选）"}` | `{"task_id": "...", "status": "queued"}` |
 | GET | `/schedule/fetch/{task_id}` | 查询抓取进度 | 无 | `{"status": "succeeded/failed/running", ...}` |
 | POST | `/schedule/course` | 新增一门课 | Course 字段 | Course 对象 |
 | PUT | `/schedule/course/{id}` | 修改某门课 | Course 字段 | Course 对象 |
