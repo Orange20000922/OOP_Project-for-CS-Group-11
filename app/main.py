@@ -15,7 +15,7 @@ from app.config import (
     STATIC_DIR,
     USERS_FILE,
 )
-from app.logging_config import configure_logging, logger
+from app.logging_config import build_log_targets, configure_logging, logger
 from app.routers import auth, knowledge, note, query, schedule
 from app.services import auth_service, shutdown_services
 
@@ -32,7 +32,14 @@ async def lifespan(app: FastAPI):
     if not USERS_FILE.exists():
         USERS_FILE.write_text('{"users": []}', encoding="utf-8")
         logger.info("Initialized empty user store at {}", USERS_FILE)
-    logger.info("Application startup completed; logs will be written to {}", APP_LOG_FILE)
+    targets = build_log_targets(APP_LOG_FILE, for_date=None)
+    logger.info(
+        "Application startup completed; combined logs={}, http logs={}, errors={}, failures={}",
+        targets["combined_daily"],
+        targets["http_daily"],
+        targets["error"],
+        targets["failure"],
+    )
     try:
         yield
     finally:

@@ -6,6 +6,7 @@ DATA_DIR = BASE_DIR / "data"
 SCHEDULES_DIR = DATA_DIR / "schedules"
 USERS_FILE = DATA_DIR / "users.json"
 LOGS_DIR = DATA_DIR / "logs"
+# Base log file name; logging_config.py expands this into combined/http/errors/failures sinks.
 APP_LOG_FILE = LOGS_DIR / "app.log"
 STATIC_DIR = BASE_DIR / "static"
 NOTES_DB_PATH = DATA_DIR / "notes.db"

@@ -38,3 +38,6 @@ app/config.py
 node_modules/
 front-for-note-module/
 node_modules
+
+# developer notes
+dev_notes/
