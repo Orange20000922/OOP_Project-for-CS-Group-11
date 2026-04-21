@@ -7,6 +7,8 @@ const state = {
   fetchTaskId: null,
   fetchPollTimer: null,
 };
+const STORAGE_KEY = "course_edit_draft_" + (Math.random().toString(36).substr(2, 8));
+let hasUnsavedDraft = false;
 
 const els = {
   authView: document.getElementById("view-auth"),
@@ -69,8 +71,8 @@ function setGlobalMessage(text, type = "") {
   if (type) {
     els.globalMessage.classList.add(type);
   }
-}
 
+}
 function withLoading(button, fn) {
   return async (...args) => {
     if (button.disabled) return;
@@ -81,7 +83,7 @@ function withLoading(button, fn) {
     } finally {
       button.disabled = false;
       button.textContent = button.dataset.text;
-     }
+    }
   };
 }
 
@@ -94,12 +96,16 @@ async function api(path, options = {}) {
   if (requestLoading.has(requestKey)) return;
   requestLoading.add(requestKey);
 
+  const requestId = Symbol(path + Date.now());
+  requestLoading.add(requestId);
+
   try {
     const headers = new Headers(options.headers || {});
     const isFormData = options.body instanceof FormData;
     if (!isFormData && options.body && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
@@ -110,6 +116,8 @@ async function api(path, options = {}) {
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
+
+
 
     if (response.status === 204) {
       return null;
@@ -141,9 +149,7 @@ async function api(path, options = {}) {
     }
 
     return payload;
-
   } catch (error) {
-
     if (error.name === "AbortError") {
       throw new Error("请求超时，请检查网络或重试");
     } else if (!navigator.onLine) {
@@ -153,40 +159,9 @@ async function api(path, options = {}) {
     }
   } finally {
     requestLoading.delete(requestKey);
+    requestLoading.delete(requestId);
   }
 }
-
-  if (response.status === 204) {
-    return null;
-}
-
-const contentType = response.headers.get("content-type") || "";
-let payload;
-
-if (contentType.includes("application/json")) {
-    try {
-        payload = await response.json();
-    } catch {
-        payload = await response.text();
-    }
-} else {
-    payload = await response.text();
-}
-
-if (!response.ok) {
-    let errorMessage;
-    if (payload && typeof payload === "object") {
-        errorMessage = payload.detail || payload.message || JSON.stringify(payload);
-    } else if (typeof payload === "string") {
-        errorMessage = payload.length > 200 ? payload.substring(0, 200) + "..." : payload;
-    } else {
-        errorMessage = "请求失败";
-    }
-    throw new Error(errorMessage);
-}
-
-return payload;
-
 
 function toggleAuthMode() {
   state.isRegister = !state.isRegister;
@@ -252,7 +227,11 @@ function populateScheduleMeta() {
   els.fetchSemester.value = state.schedule.semester || "";
 }
 
-function resetCourseForm() {
+function resetCourseForm(skipConfirm = false) {
+  if (hasUnsavedDraft && !skipConfirm) {
+    const confirmReset = window.confirm("当前编辑的课程数据尚未保存，确认清空并退出编辑吗？");
+    if (!confirmReset) return false; 
+  }
   state.editingCourseId = null;
   els.courseForm.reset();
   els.courseWeekday.value = "1";
@@ -261,8 +240,59 @@ function resetCourseForm() {
   els.courseWeekType.value = "all";
   els.courseFormTitle.textContent = "手动录入课程";
   els.btnCancelEdit.classList.add("hidden");
+  localStorage.removeItem(STORAGE_KEY);
+  hasUnsavedDraft = false;
+  return true;
 }
 
+
+function saveCourseDraft() {
+  if (!state.editingCourseId && !els.courseName.value.trim()) {
+    return;
+  }
+
+  const draftData = {
+    editingCourseId: state.editingCourseId,
+    name: els.courseName.value.trim(),
+    teacher: els.courseTeacher.value.trim(),
+    location: els.courseLocation.value.trim(),
+    weekday: els.courseWeekday.value,
+    period_start: els.courseStart.value,
+    period_end: els.courseEnd.value,
+    weeks: els.courseWeeks.value.trim(),
+    week_type: els.courseWeekType.value,
+  };
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(draftData));
+
+  hasUnsavedDraft = Object.values(draftData).some(val => val);
+}
+
+
+function restoreCourseDraft() {
+  const draftStr = localStorage.getItem(STORAGE_KEY);
+  if (!draftStr) return;
+
+  try {
+    const draft = JSON.parse(draftStr);
+    state.editingCourseId = draft.editingCourseId;
+    els.courseFormTitle.textContent = draft.editingCourseId ? "编辑课程" : "手动录入课程";
+    els.courseName.value = draft.name;
+    els.courseTeacher.value = draft.teacher;
+    els.courseLocation.value = draft.location;
+    els.courseWeekday.value = draft.weekday;
+    els.courseStart.value = draft.period_start;
+    els.courseEnd.value = draft.period_end;
+    els.courseWeeks.value = draft.weeks;
+    els.courseWeekType.value = draft.week_type;
+    els.btnCancelEdit.classList.remove("hidden");
+    
+    hasUnsavedDraft = true;
+  } catch (e) {
+    localStorage.removeItem(STORAGE_KEY);
+    console.error("恢复课程草稿失败：", e);
+  }
+}
 function validateCourseForm() {
   const errors = [];
   const name = els.courseName.value.trim();
@@ -284,7 +314,81 @@ function validateCourseForm() {
   }
 }
 
+function checkCourseConflict(newCourse) {
+  if (!state.schedule?.courses) return;
+
+  const newWeeks = new Set(newCourse.weeks);
+  const newWeekday = Number(newCourse.weekday);
+  const newStart = Number(newCourse.period_start);
+  const newEnd = Number(newCourse.period_end);
+
+  for (const course of state.schedule.courses) {
+    if (course.id === state.editingCourseId) continue;
+
+    if (Number(course.weekday) !== newWeekday) continue;
+
+    const existingWeeks = new Set(course.weeks);
+    const hasWeekOverlap = [...newWeeks].some(week => existingWeeks.has(week));
+    if (!hasWeekOverlap) continue;
+
+    const existingStart = Number(course.period_start);
+    const existingEnd = Number(course.period_end);
+    const hasPeriodOverlap = !(newEnd < existingStart || newStart > existingEnd);
+    
+    if (hasPeriodOverlap) {
+      throw new Error(
+        `课程冲突：与「${course.name}」在 周${course.weekday} 第${course.period_start}-${course.period_end}节（周次${formatWeeks(course.weeks)}）重复`
+      );
+    }
+  }
+}
+
+async function submitCourseForm(e) {
+  e.preventDefault(); 
+  try {
+    validateCourseForm();
+    const weeks = parseWeeksInput(els.courseWeeks.value.trim());
+    const courseData = {
+      name: els.courseName.value.trim(),
+      teacher: els.courseTeacher.value.trim(),
+      location: els.courseLocation.value.trim(),
+      weekday: Number(els.courseWeekday.value),
+      period_start: Number(els.courseStart.value),
+      period_end: Number(els.courseEnd.value),
+      weeks,
+      week_type: els.courseWeekType.value,
+    };
+
+    checkCourseConflict({ ...courseData, id: state.editingCourseId });
+
+    let apiPath, method;
+    if (state.editingCourseId) {
+      apiPath = `/schedule/course/${state.editingCourseId}`;
+      method = "PUT";
+    } else {
+      apiPath = "/schedule/course";
+      method = "POST";
+    }
+
+    await api(apiPath, {
+      method,
+      body: JSON.stringify(courseData),
+    });
+
+    setGlobalMessage(state.editingCourseId ? "课程已更新" : "课程已添加", "success");
+    resetCourseForm(true); 
+    localStorage.removeItem(STORAGE_KEY);
+    hasUnsavedDraft = false;
+    await refreshSchedule(); 
+
+  } catch (error) {
+    setGlobalMessage(error.message, "error");
+  }
+}
+
 function startEditCourse(course) {
+  localStorage.removeItem(STORAGE_KEY);
+  hasUnsavedDraft = false;
   state.editingCourseId = course.id;
   els.courseFormTitle.textContent = "编辑课程";
   els.courseName.value = course.name;
@@ -296,6 +400,7 @@ function startEditCourse(course) {
   els.courseWeeks.value = formatWeeks(course.weeks);
   els.courseWeekType.value = course.week_type;
   els.btnCancelEdit.classList.remove("hidden");
+  saveCourseDraft();
 }
 
 function renderCourseList() {
@@ -616,6 +721,7 @@ async function submitCourseForm(event) {
     validateCourseForm();
 
     const wasEditing = Boolean(state.editingCourseId);
+    const weeks = parseWeeksInput(els.courseWeeks.value);
     const payload = {
       name: els.courseName.value.trim(),
       teacher: els.courseTeacher.value.trim(),
@@ -623,62 +729,97 @@ async function submitCourseForm(event) {
       weekday: Number(els.courseWeekday.value),
       period_start: Number(els.courseStart.value),
       period_end: Number(els.courseEnd.value),
-      weeks: parseWeeksInput(els.courseWeeks.value.trim()),
+      weeks: weeks,
       week_type: els.courseWeekType.value,
     };
 
-    const path = wasEditing
-      ? `/schedule/course/${state.editingCourseId}`
-      : "/schedule/course";
-    const method = wasEditing ? "PUT" : "POST";
-    await api(path, { method, body: JSON.stringify(payload) });
+
+    checkCourseConflict(payload);
+
+    if (wasEditing) {
+      await api(`/schedule/course/${state.editingCourseId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+      setGlobalMessage("课程已更新", "success");
+    } else {
+      await api("/schedule/course", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setGlobalMessage("课程已添加", "success");
+    }
+
     resetCourseForm();
     await refreshSchedule();
-    setGlobalMessage(wasEditing ? "课程已更新" : "课程已新增", "success");
+
   } catch (error) {
     setGlobalMessage(error.message, "error");
   }
 }
 
-async function logout() {
+
+if (els.authToggle) els.authToggle.addEventListener("click", toggleAuthMode);
+if (els.authSubmit) els.authSubmit.addEventListener("click", submitAuth);
+if (els.btnLogout) els.btnLogout.addEventListener("click", showAuthView);
+if (els.btnSaveScheduleMeta) els.btnSaveScheduleMeta.addEventListener("click", withLoading(els.btnSaveScheduleMeta, saveScheduleMeta));
+if (els.btnUpload) els.btnUpload.addEventListener("click", withLoading(els.btnUpload, uploadScheduleFile));
+if (els.btnFetch) els.btnFetch.addEventListener("click", withLoading(els.btnFetch, submitFetchTask));
+if (els.btnCancelEdit) els.btnCancelEdit.addEventListener("click", resetCourseForm);
+if (els.courseForm) els.courseForm.addEventListener("submit", submitCourseForm);
+if (els.btnPrevWeek) els.btnPrevWeek.addEventListener("click", () => {
+  state.weekOffset -= 1;
+  loadWeek();
+});
+if (els.btnNextWeek) els.btnNextWeek.addEventListener("click", () => {
+  state.weekOffset += 1;
+  loadWeek();
+});
+
+
+document.addEventListener("DOMContentLoaded", async () => {
   try {
-    await api("/auth/logout", { method: "POST" });
-  } finally {
-    stopFetchPolling();
-    showAuthView();
-  }
-}
-
-function bindEvents() {
-  els.authToggle.onclick = toggleAuthMode;
-  els.authSubmit.onclick = submitAuth;
-  els.btnLogout.onclick = logout;
-  els.btnSaveScheduleMeta.onclick = saveScheduleMeta;
-  els.btnUpload.onclick = uploadScheduleFile;
-  els.btnFetch.onclick = submitFetchTask;
-  els.btnPrevWeek.onclick = () => {
-    state.weekOffset -= 1;
-    loadWeek();
-  };
-  els.btnNextWeek.onclick = () => {
-    state.weekOffset += 1;
-    loadWeek();
-  };
-  els.courseForm.addEventListener("submit", submitCourseForm);
-  els.btnCancelEdit.onclick = resetCourseForm;
-}
-
-async function bootstrap() {
-  bindEvents();
-  resetCourseForm();
-  renderEmptyTable();
-  renderCourseList();
-
-  try {
+    state.user = await api("/auth/me");
     await enterAppView();
   } catch {
     showAuthView();
   }
-}
+});
 
-bootstrap();
+document.addEventListener("DOMContentLoaded", function() {
+  restoreCourseDraft();
+
+  const courseFormInputs = [
+    els.courseName, els.courseTeacher, els.courseLocation,
+    els.courseWeekday, els.courseStart, els.courseEnd,
+    els.courseWeeks, els.courseWeekType
+  ];
+
+  courseFormInputs.forEach(input => {
+    if (input) {
+      input.addEventListener("input", saveCourseDraft);
+      input.addEventListener("change", saveCourseDraft);
+    }
+  });
+
+  if (els.btnCancelEdit) {
+    els.btnCancelEdit.onclick = function() {
+      const isReset = resetCourseForm();
+      if (isReset) {
+        localStorage.removeItem(STORAGE_KEY);
+        hasUnsavedDraft = false;
+      }
+    };
+  }
+  if (els.courseForm) {
+    els.courseForm.addEventListener("submit", submitCourseForm);
+  }
+
+  window.addEventListener("beforeunload", function(e) {
+    if (hasUnsavedDraft) {
+      e.preventDefault();
+      e.returnValue = "当前编辑的课程数据尚未保存，确定离开吗？";
+      return e.returnValue;
+    }
+  });
+});
