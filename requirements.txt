@@ -11,7 +11,7 @@ loguru
 httpx
 pytest
 python-docx
-mem0ai
+mem0ai==1.0.4
 qdrant-client
 sentence-transformers
 openai
