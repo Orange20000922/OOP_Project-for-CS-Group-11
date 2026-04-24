@@ -1,4 +1,5 @@
 const dashboardFrontend = window.scheduleFrontend;
+const FETCH_PENDING_STATUSES = ["queued", "running"];
 
 new Vue({
   el: "#dashboard-app",
@@ -287,15 +288,17 @@ new Vue({
       try {
         const task = await dashboardFrontend.api(`/schedule/fetch/${taskId}`);
         this.fetchStatusText = `${task.status} | ${task.message}`;
-        if (task.status === "succeeded" || task.status === "failed") {
-          this.stopFetchPolling();
-          if (task.status === "succeeded") {
-            await this.loadOverview({ silent: true });
-            this.fetchForm.password = "";
-            this.setStatus(task.message, "success");
-          } else {
-            this.setStatus(task.message, "error");
-          }
+        if (FETCH_PENDING_STATUSES.includes(task.status)) {
+          return;
+        }
+
+        this.stopFetchPolling();
+        if (task.status === "succeeded") {
+          await this.loadOverview({ silent: true });
+          this.fetchForm.password = "";
+          this.setStatus(task.message, "success");
+        } else {
+          this.setStatus(task.message || "课表抓取未完成", "error");
         }
       } catch (error) {
         this.stopFetchPolling();

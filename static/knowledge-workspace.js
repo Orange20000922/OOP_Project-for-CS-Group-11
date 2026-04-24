@@ -313,7 +313,7 @@
         if (this.selectedCourse) {
           return "保持课程维度独立，左侧维护知识树，中间管理笔记，右侧负责检索、问答与图谱。";
         }
-        return "这里保留完整的知识工作流，用于跨课程演示整体能力。";
+        return "集中管理全部课程的笔记、知识树、检索问答与图谱。";
       },
       courseScopeLabel: function courseScopeLabel() {
         return this.selectedCourse ? "当前课程视图" : "全局视图";

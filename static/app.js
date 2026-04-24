@@ -1,3 +1,5 @@
+const FETCH_PENDING_STATUSES = ["queued", "running"];
+
 const state = {
   isRegister: false,
   user: null,
@@ -290,7 +292,6 @@ function restoreCourseDraft() {
     hasUnsavedDraft = true;
   } catch (e) {
     localStorage.removeItem(STORAGE_KEY);
-    console.error("恢复课程草稿失败：", e);
   }
 }
 function validateCourseForm() {
@@ -672,14 +673,16 @@ async function pollFetchTask(taskId) {
   try {
     const task = await api(`/schedule/fetch/${taskId}`);
     els.fetchStatus.textContent = `${task.status} | ${task.message}`;
-    if (task.status === "succeeded" || task.status === "failed") {
-      stopFetchPolling();
-      if (task.status === "succeeded") {
-        await refreshSchedule();
-        setGlobalMessage(task.message, "success");
-      } else {
-        setGlobalMessage(task.message, "error");
-      }
+    if (FETCH_PENDING_STATUSES.includes(task.status)) {
+      return;
+    }
+
+    stopFetchPolling();
+    if (task.status === "succeeded") {
+      await refreshSchedule();
+      setGlobalMessage(task.message, "success");
+    } else {
+      setGlobalMessage(task.message || "课表抓取未完成", "error");
     }
   } catch (error) {
     stopFetchPolling();
