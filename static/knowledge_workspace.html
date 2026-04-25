@@ -70,7 +70,7 @@
               <article class="fact-card">
                 <span>图谱状态</span>
                 <strong>{{ graphData.total_links || 0 }} 条边</strong>
-                <small>{{ graphData.routing_applied ? "已启用主题路由" : "直接做 k-NN" }}</small>
+                <small>{{ graphData.routing_applied ? "已按主题筛选" : "按相似度关联" }}</small>
               </article>
             </div>
           </section>
@@ -353,7 +353,7 @@
             <div class="section-header">
               <div>
                 <h3>问答</h3>
-                <p class="subtle">优先走课程级检索。若本地未配置 LLM，会退化为检索片段拼接结果。</p>
+                <p class="subtle">优先根据当前课程的笔记生成回答；暂时无法生成完整回答时，会显示相关片段作为参考。</p>
               </div>
             </div>
 
@@ -395,7 +395,7 @@
             <div class="section-header">
               <div>
                 <h3>检索与图谱</h3>
-                <p class="subtle">检索用于定位切片；图谱按当前主题或查询先路由，再对候选节点做 Top-k 邻近连接。</p>
+                <p class="subtle">检索用于定位笔记片段；图谱会按当前主题或查询内容生成相关节点连线。</p>
               </div>
             </div>
 
@@ -406,7 +406,7 @@
               </label>
 
               <label class="field">
-                <span>Graph Query</span>
+                <span>图谱检索</span>
                 <input v-model.trim="graphQuery" type="text" placeholder="留空则按当前课程 / 主题生成图谱">
               </label>
             </div>
@@ -439,7 +439,7 @@
 
             <div class="graph-controls">
               <label class="field">
-                <span>Top-k</span>
+                <span>关联数量</span>
                 <input v-model.number="graphTopK" type="number" min="1" max="10">
               </label>
 

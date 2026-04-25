@@ -593,6 +593,43 @@ class KnowledgeService:
                 mapping[note_id] = topic.id
         return mapping
 
+    def _iter_memory_results(self, raw_results: Any) -> list[dict[str, Any]]:
+        if isinstance(raw_results, dict):
+            candidates = raw_results.get("results") or raw_results.get("memories") or []
+        else:
+            candidates = raw_results
+
+        if not isinstance(candidates, list):
+            return []
+
+        normalized: list[dict[str, Any]] = []
+        for item in candidates:
+            if isinstance(item, dict):
+                data = dict(item)
+            else:
+                dump = getattr(item, "model_dump", None)
+                if callable(dump):
+                    data = dump()
+                else:
+                    dump = getattr(item, "dict", None)
+                    if callable(dump):
+                        data = dump()
+                    else:
+                        continue
+
+            metadata = data.get("metadata") or data.get("payload") or {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            data["metadata"] = metadata
+
+            if data.get("memory") is None:
+                data["memory"] = data.get("text") or data.get("content") or ""
+            if data.get("score") is None:
+                data["score"] = data.get("similarity") or 0.0
+            normalized.append(data)
+
+        return normalized
+
     def _build_search_result(self, item: dict[str, Any]) -> SearchResult:
         metadata = item.get("metadata") or {}
         chunk_id = str(metadata.get("chunk_id", ""))
@@ -777,10 +814,10 @@ class KnowledgeService:
                 return []
             fetch_limit = max(limit * 4, 20)
 
-        raw_results = memory.search(query=query, user_id=student_id, limit=fetch_limit)
+        raw_results = memory.search(query=query, filters={"user_id": student_id}, limit=fetch_limit)
 
         results: list[SearchResult] = []
-        for item in raw_results:
+        for item in self._iter_memory_results(raw_results):
             metadata = item.get("metadata") or {}
             note_id = str(metadata.get("note_id", ""))
             if allowed_note_ids is not None and note_id not in allowed_note_ids:
@@ -922,11 +959,11 @@ class KnowledgeService:
                 kept_neighbors = 0
                 results = self._memory.search(
                     query=chunk.content,
-                    user_id=student_id,
+                    filters={"user_id": student_id},
                     limit=search_limit,
                 )
 
-                for item in results:
+                for item in self._iter_memory_results(results):
                     metadata = item.get("metadata") or {}
                     neighbor_id = str(metadata.get("chunk_id", ""))
                     if (
