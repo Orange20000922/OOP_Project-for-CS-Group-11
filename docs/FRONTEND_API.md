@@ -1,30 +1,27 @@
-# 前端接口文档
+# 前端 API 接口规范
 
-本文档说明当前系统中前端会直接调用的 URL 接口、请求方式、鉴权方式、请求参数和返回结构。
+> 本文档定义前后端之间的 HTTP 接口契约，包括 URL、请求方式、鉴权方式、请求参数和返回结构。前端开发和后端开发均以此文档为准。
 
 ## 1. 通用约定
 
-### 1.0 页面入口
+### 1.1 页面路由
 
-- 登录页：`/login`
-- 工作台页：`/dashboard`
-- 知识工作台页：`/knowledge-workspace`
-- 根路径 `/` 会重定向到 `/login`
-- 前端登录成功后，应跳转到 `/dashboard`
-- 若用户已登录，再访问 `/login`，后端会重定向到 `/dashboard`
-- 若用户未登录却直接访问 `/dashboard`，后端会重定向到 `/login`
-- 若用户未登录却直接访问 `/knowledge-workspace`，后端也会重定向到 `/login`
-- 静态资源通过 `/static/...` 暴露，例如 `/static/style.css`
+| 路径 | 页面 | 鉴权 |
+|------|------|------|
+| `/` | 重定向到 `/login` | 无 |
+| `/login` | 登录/注册 | 已登录则重定向到 `/dashboard` |
+| `/dashboard` | 课表工作台 | 未登录重定向到 `/login` |
+| `/knowledge-workspace` | 知识工作台 | 未登录重定向到 `/login` |
 
-### 1.1 基础说明
+静态资源通过 `/static/...` 暴露。
 
-- 接口基于同源访问设计，前端可直接请求相对路径，例如 `/auth/login`
-- 除文件上传接口外，请求体均为 `application/json`
-- 文件上传接口使用 `multipart/form-data`
+### 1.2 请求规范
+
+- 所有接口基于同源访问，前端使用相对路径（如 `/auth/login`）
+- 除文件上传外，请求体为 `application/json`
+- 文件上传使用 `multipart/form-data`
 - 登录态通过 Cookie 维护，Cookie 名称为 `session_token`
-- 前端请求时应带上 `credentials: "include"`
-
-示例：
+- 所有请求需携带 `credentials: "include"`
 
 ```js
 fetch("/auth/me", {
@@ -33,26 +30,26 @@ fetch("/auth/me", {
 });
 ```
 
-### 1.2 错误返回格式
-
-接口报错时，统一返回：
+### 1.3 错误返回格式
 
 ```json
 {
-  "detail": "错误信息"
+  "detail": "错误描述"
 }
 ```
 
-常见状态码：
+### 1.4 状态码约定
 
-- `200` 请求成功
-- `201` 创建成功
-- `202` 已接受异步任务
-- `204` 删除成功，无返回体
-- `400` 参数错误或业务校验失败
-- `401` 未登录、登录失效或认证失败
-- `404` 资源不存在
-- `422` 上传文件可读但解析失败
+| 状态码 | 含义 |
+|--------|------|
+| `200` | 请求成功 |
+| `201` | 创建成功 |
+| `202` | 异步任务已接受 |
+| `204` | 操作成功，无返回体 |
+| `400` | 参数错误或业务校验失败 |
+| `401` | 未登录、登录失效或认证失败 |
+| `404` | 资源不存在 |
+| `422` | 文件可读但解析失败 |
 
 ## 2. 主要数据结构
 
@@ -374,10 +371,10 @@ JSON 上传说明：
 - 状态码: `202`
 - 返回体: `FetchTaskStatus`
 
-前端建议：
+前端轮询方式：
 
 - 记录返回的 `task_id`
-- 定时轮询 `/schedule/fetch/{task_id}`
+- 定时轮询 `/schedule/fetch/{task_id}` 直到状态变为终态
 
 ### 4.5 查询抓取任务状态
 
@@ -596,46 +593,23 @@ JSON 上传说明：
 - `401`: 未登录
 - `404`: 课表未初始化
 
-## 6. 推荐前端调用顺序
+## 6. 典型调用流程
 
-### 6.1 首次进入页面
+### 6.1 页面初始化
 
-1. 调用 `/auth/me`
-2. 若返回 `200`，进入应用页
-3. 再调用 `/query/overview`
-4. 若课表存在，再按需刷新 `/query/week`、`/query/week/{offset}` 或 `/query/now`
+1. `GET /auth/me` — 检查登录态
+2. 若 `200`，`GET /query/overview` — 加载工作台数据
+3. 按需调用 `/query/week/{offset}` 切换周次
 
-### 6.2 注册/登录
+### 6.2 注册与登录
 
-1. 注册时先调用 `/auth/register`
-2. 成功后调用 `/auth/login`
-3. 登录成功后调用 `/query/overview` 判断是否已初始化学期
+1. `POST /auth/register` — 创建账号
+2. `POST /auth/login` — 登录，获取 Cookie
+3. `GET /query/overview` — 判断是否已初始化学期
 
-### 6.3 从统一身份认证抓取课表
+### 6.3 教务课表抓取
 
-1. 调用 `/schedule/fetch`
-2. 获取 `task_id`
-3. 每隔 2~3 秒轮询 `/schedule/fetch/{task_id}`
-4. 当 `status = succeeded` 时刷新 `/schedule` 与 `/query/week`
-5. 当前前端可以直接复用登录用户的学号作为 `scnu_account`，通常无需重复填写
+1. `POST /schedule/fetch` — 提交抓取任务
+2. 每 2~3 秒轮询 `GET /schedule/fetch/{task_id}`
+3. `status = succeeded` 后刷新 `/query/overview`
 
-## 7. 当前前端实际使用到的接口
-
-目前静态前端页面已使用以下接口：
-
-- `/auth/register`
-- `/auth/login`
-- `/auth/logout`
-- `/auth/me`
-- `/query/overview`
-- `/schedule`
-- `/schedule/upload`
-- `/schedule/fetch`
-- `/schedule/fetch/{task_id}`
-- `/schedule/course`
-- `/schedule/course/{course_id}`
-- `/query/now`
-- `/query/week`
-- `/query/week/{offset}`
-
-如果后续接口字段发生变化，应同步更新此文档与前端调用代码。

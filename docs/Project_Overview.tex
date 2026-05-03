@@ -1,0 +1,891 @@
+\documentclass[12pt,a4paper]{article}
+
+% ─── Packages ───────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{longtable}
+\usepackage{multicol}
+\usepackage{fancyhdr}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!60!black,
+    citecolor=blue!60!black,
+    urlcolor=blue!60!black,
+}
+
+% ─── Code listing style ────────────────────────────────────
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{codeframe}{RGB}{200,200,200}
+\lstset{
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue!70!black}\bfseries,
+    commentstyle=\color{green!50!black}\itshape,
+    stringstyle=\color{red!60!black},
+    breaklines=true,
+    showstringspaces=false,
+    tabsize=4,
+    captionpos=b,
+}
+
+% ─── Header / Footer ──────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Student Schedule Management System}
+\fancyhead[R]{\small CS Group 11}
+\fancyfoot[C]{\thepage}
+
+% ─── Title ─────────────────────────────────────────────────
+\title{
+    \vspace{-1cm}
+    \textbf{Student Schedule Management System} \\[0.3cm]
+    \large Project Overview and Technical Report \\[0.2cm]
+    \normalsize Object-Oriented Programming Course Project
+}
+\author{
+    CS Group 11 \\
+    South China Normal University
+}
+\date{May 2026}
+
+% ═══════════════════════════════════════════════════════════
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\begin{abstract}
+This report presents the design and implementation of a web-based student schedule management system developed as a university Object-Oriented Programming course project. The system provides schedule CRUD operations, real-time course queries, automatic schedule fetching from the SCNU academic portal, and an integrated knowledge workspace featuring note upload, semantic search, RAG-based Q\&A, and knowledge graph visualization. The backend is built with Python/FastAPI and employs four hand-implemented data structures (hash table, doubly linked list, binary search tree, and queue) as required by the course. The frontend uses Vue\,2 with plain HTML/CSS/JS. Persistence is file-based (JSON and SQLite), and the knowledge module leverages vector embeddings via mem0/Qdrant with a DeepSeek LLM for summarization and question answering.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ═══════════════════════════════════════════════════════════
+\section{Introduction}
+\label{sec:intro}
+
+\subsection{Motivation}
+
+University students frequently need to check their class schedules---what course is happening now, what courses are today, and what the week looks like. Existing solutions (paper timetables, screenshots, or generic calendar apps) lack integration with the academic system and offer no intelligent features such as note management or knowledge retrieval.
+
+This project builds a purpose-built web application that:
+\begin{enumerate}[nosep]
+    \item Manages semester schedules with full CRUD support.
+    \item Queries the current, daily, and weekly courses in real time.
+    \item Fetches schedules directly from the SCNU academic portal (Qiangzhi system).
+    \item Provides a knowledge workspace where students upload course notes, search semantically, ask questions via RAG, and explore a knowledge graph.
+\end{enumerate}
+
+\subsection{Course Requirements}
+
+The OOP course mandates the hand-implementation of at least four classic data structures without relying on built-in library equivalents. Our system integrates:
+\begin{itemize}[nosep]
+    \item \textbf{Hash Table} (chaining) --- session store and user index.
+    \item \textbf{Doubly Linked List} --- ordered per-user course list.
+    \item \textbf{Binary Search Tree} --- course time index for $O(\log n)$ lookup.
+    \item \textbf{Queue} --- asynchronous task scheduling for the SCNU scraper.
+\end{itemize}
+
+\subsection{Technology Stack}
+
+\begin{table}[H]
+\centering
+\caption{Technology stack summary}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Layer} & \textbf{Technology} \\
+\midrule
+Backend framework & Python 3.11+, FastAPI, Uvicorn \\
+Frontend & HTML/CSS/JS, Vue\,2 (CDN) \\
+Persistence & JSON files, SQLite (notes), Qdrant (vectors) \\
+Authentication & Cookie/Session (PBKDF2 or bcrypt) \\
+Vector search & mem0 + Qdrant (local disk mode) \\
+Embedding model & \texttt{paraphrase-multilingual-MiniLM-L12-v2} \\
+LLM & DeepSeek Chat (OpenAI-compatible API) \\
+Testing & pytest (unit + integration + browser E2E) \\
+Version control & Git + GitHub \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ═══════════════════════════════════════════════════════════
+\section{System Architecture}
+\label{sec:arch}
+
+The system follows a layered architecture with clear separation of concerns:
+
+\begin{verbatim}
+Browser (Vue 2 SPA pages)
+    |
+    | HTTP (JSON / multipart)
+    v
+Routers (thin layer: auth, schedule, query, note, knowledge)
+    |
+    v
+Services (business logic: AuthService, ScheduleService,
+          NoteService, KnowledgeService, SCNUScraper)
+    |
+    v
+Storage (file_io, UserStore, ScheduleStore, NoteStore,
+         KnowledgeTreeStore, TopicVectorStore)
+    |
+    v
+Persistence (JSON files, SQLite, Qdrant vector DB, disk files)
+\end{verbatim}
+
+\subsection{Directory Layout}
+
+\begin{lstlisting}[language={},caption={Project directory structure}]
+OOP_project/
++-- app/
+|   +-- main.py              # FastAPI entry point
+|   +-- config.py            # Configuration constants
+|   +-- logging_config.py    # Structured logging (Loguru)
+|   +-- core/                # Hand-implemented data structures
+|   |   +-- hash_table.py
+|   |   +-- doubly_linked_list.py
+|   |   +-- bst.py
+|   |   +-- queue.py
+|   +-- models/              # Pydantic data models
+|   +-- storage/             # Persistence layer
+|   +-- services/            # Business logic
+|   +-- routers/             # API route handlers
++-- static/                  # Frontend pages and assets
++-- data/                    # Runtime data (gitignored)
++-- tests/                   # pytest test suite (~3000 LOC)
++-- docs/                    # Design documents
++-- requirements.txt
+\end{lstlisting}
+
+\subsection{Request Lifecycle}
+
+A typical authenticated request follows this path:
+\begin{enumerate}[nosep]
+    \item The browser sends a request (e.g., \texttt{GET /query/overview}) with the \texttt{session\_token} cookie.
+    \item The router extracts the cookie and calls \texttt{AuthService.get\_student\_id(token)}.
+    \item \texttt{AuthService} looks up the token in the in-memory \texttt{HashTable<token, SessionRecord>}; returns the student ID or raises \texttt{PermissionError}.
+    \item The router delegates to the appropriate service method.
+    \item The service loads data from storage, applies business logic, and returns a Pydantic model.
+    \item FastAPI serializes the model to JSON and sends the HTTP response.
+\end{enumerate}
+
+% ═══════════════════════════════════════════════════════════
+\section{Custom Data Structures}
+\label{sec:ds}
+
+All four data structures are implemented from scratch in \texttt{app/core/} without using Python's built-in \texttt{dict}, \texttt{list} (as a linked structure), or \texttt{queue} module equivalents.
+
+\subsection{Hash Table (Chaining)}
+
+\textbf{File:} \texttt{app/core/hash\_table.py} \quad \textbf{Lines:} 222
+
+\textbf{Design:}
+\begin{itemize}[nosep]
+    \item Generic class \texttt{HashTable[K, V]} with configurable initial bucket count and load factor (default 0.75).
+    \item Each bucket is a circular singly linked list (\texttt{\_Bucket}) with a tail pointer for $O(1)$ append.
+    \item Custom hash function: for integers, masks to 31 bits; for other types, applies a multiplicative hash (factor 131) over the UTF-8 \texttt{repr} bytes.
+    \item Automatic resizing (double capacity) when load factor is exceeded.
+    \item Supports Python dunder protocols: \texttt{\_\_getitem\_\_}, \texttt{\_\_setitem\_\_}, \texttt{\_\_delitem\_\_}, \texttt{\_\_contains\_\_}, \texttt{\_\_len\_\_}, \texttt{\_\_iter\_\_}.
+\end{itemize}
+
+\textbf{Usage in the system:}
+\begin{itemize}[nosep]
+    \item \texttt{AuthService.\_sessions}: maps session tokens to \texttt{SessionRecord} for $O(1)$ authentication on every request.
+    \item \texttt{UserStore.\_users}: maps student IDs to \texttt{User} objects for fast lookup.
+    \item \texttt{ScheduleService.\_tasks}: maps task IDs to \texttt{FetchTaskStatus} for async scraper tracking.
+    \item \texttt{ScheduleService.\_build\_week\_courses}: temporary hash table to group courses by weekday.
+\end{itemize}
+
+\textbf{Complexity:} Average $O(1)$ for \texttt{set}, \texttt{get}, \texttt{delete}; worst-case $O(n)$ under pathological hash collisions.
+
+\subsection{Doubly Linked List}
+
+\textbf{File:} \texttt{app/core/doubly\_linked\_list.py} \quad \textbf{Lines:} 158
+
+\textbf{Design:}
+\begin{itemize}[nosep]
+    \item Each \texttt{Node} holds arbitrary data plus \texttt{prev}/\texttt{next} pointers.
+    \item Maintains \texttt{head}, \texttt{tail}, and \texttt{\_size}.
+    \item Operations: \texttt{append}, \texttt{prepend}, \texttt{insert\_after}, \texttt{remove}, \texttt{find}, \texttt{find\_by} (predicate), \texttt{to\_list}, \texttt{from\_list}, \texttt{clear}.
+    \item Supports Python iteration via \texttt{\_\_iter\_\_}.
+\end{itemize}
+
+\textbf{Usage:} Stores each user's course list ordered by \texttt{(weekday, period\_start)}. Enables efficient insertion/deletion when courses are added or removed, and sequential traversal for ``today's courses'' queries.
+
+\textbf{Complexity:} $O(1)$ append/prepend, $O(n)$ search/remove by value.
+
+\subsection{Binary Search Tree}
+
+\textbf{File:} \texttt{app/core/bst.py} \quad \textbf{Lines:} 61
+
+\textbf{Design:}
+\begin{itemize}[nosep]
+    \item Generic \texttt{BinarySearchTree[K, V]} with recursive \texttt{insert}, \texttt{search}, and \texttt{delete}.
+    \item Deletion uses in-order successor replacement (find minimum in right subtree).
+    \item Keys must support comparison operators.
+\end{itemize}
+
+\textbf{Usage:} Course time index where \texttt{key = weekday * 100 + period\_start}. The ``query current course'' feature computes the current key and performs a BST search to find the matching course in $O(\log n)$ average time.
+
+\textbf{Complexity:} Average $O(\log n)$ for insert/search/delete; worst-case $O(n)$ for degenerate (sorted) input.
+
+\subsection{Queue}
+
+\textbf{File:} \texttt{app/core/queue.py} \quad \textbf{Lines:} 55
+
+\textbf{Design:}
+\begin{itemize}[nosep]
+    \item Linked-list-based FIFO queue with \texttt{head} and \texttt{tail} pointers.
+    \item Operations: \texttt{enqueue}, \texttt{dequeue} (raises \texttt{IndexError} if empty), \texttt{peek}, \texttt{is\_empty}, \texttt{size}.
+\end{itemize}
+
+\textbf{Usage:} The SCNU scraper task queue. When a user requests schedule fetching, the task is enqueued; a background thread dequeues and processes tasks serially to avoid overwhelming the academic portal with concurrent requests.
+
+\textbf{Complexity:} $O(1)$ enqueue and dequeue.
+
+% ═══════════════════════════════════════════════════════════
+\section{Data Models}
+\label{sec:models}
+
+All models are defined using Pydantic \texttt{BaseModel} for automatic validation and JSON serialization.
+
+\subsection{Core Schedule Models}
+
+\begin{table}[H]
+\centering
+\caption{Course model fields}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{id} & \texttt{str} & UUID primary key \\
+\texttt{name} & \texttt{str} & Course name \\
+\texttt{teacher} & \texttt{str} & Instructor name \\
+\texttt{location} & \texttt{str} & Classroom \\
+\texttt{weekday} & \texttt{int} & 1 (Mon) -- 7 (Sun) \\
+\texttt{period\_start} & \texttt{int} & Starting period (1--12) \\
+\texttt{period\_end} & \texttt{int} & Ending period (1--12) \\
+\texttt{weeks} & \texttt{list[int]} & Active week numbers \\
+\texttt{week\_type} & \texttt{Literal} & \texttt{"all"} / \texttt{"odd"} / \texttt{"even"} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The \texttt{Schedule} model wraps a list of courses with semester metadata (\texttt{student\_id}, \texttt{semester}, \texttt{semester\_start}).
+
+\subsection{User and Authentication Models}
+
+\begin{itemize}[nosep]
+    \item \texttt{User}: \texttt{student\_id}, \texttt{name}, \texttt{password\_hash}, \texttt{scnu\_account}.
+    \item \texttt{UserCreate}: registration payload with validation constraints.
+    \item \texttt{UserLogin}: login payload.
+    \item \texttt{UserInfo}: public-facing user info (no password hash).
+\end{itemize}
+
+\subsection{Knowledge Module Models}
+
+\begin{itemize}[nosep]
+    \item \texttt{Note}: metadata for an uploaded document (id, student\_id, course\_id, filename, file\_type, title, summary, chunk\_count, timestamps).
+    \item \texttt{NoteChunk}: a text segment extracted from a note (chunk\_id, note\_id, heading, content, chunk\_index).
+    \item \texttt{KnowledgeTopic}: a node in the knowledge tree (id, name, parent\_id, child\_ids, note\_ids, summary, keywords).
+    \item \texttt{KnowledgeTree}: the full tree structure per student per course.
+    \item \texttt{GraphNode}/\texttt{GraphLink}/\texttt{GraphResponse}: D3-compatible graph data for the knowledge graph visualization.
+    \item \texttt{SearchResult}, \texttt{AskResponse}: semantic search and RAG Q\&A response models.
+\end{itemize}
+
+% ═══════════════════════════════════════════════════════════
+\section{Storage Layer}
+\label{sec:storage}
+
+The storage layer abstracts persistence behind clean interfaces, allowing the service layer to remain agnostic to the underlying storage mechanism.
+
+\subsection{File I/O Utilities}
+
+\texttt{app/storage/file\_io.py} provides:
+\begin{itemize}[nosep]
+    \item \textbf{Atomic writes}: writes to a temporary file, then atomically replaces the target via \texttt{os.replace}. Includes a retry mechanism for Windows permission issues.
+    \item \textbf{Safe reads}: returns a deep-copied default if the file does not exist; raises on malformed JSON.
+    \item \textbf{Model serialization}: \texttt{model\_to\_dict()} handles both Pydantic v1 and v2 models.
+\end{itemize}
+
+\subsection{UserStore}
+
+\begin{itemize}[nosep]
+    \item Persists all users to \texttt{data/users.json}.
+    \item Maintains an in-memory \texttt{HashTable<student\_id, User>} index for $O(1)$ lookups.
+    \item On startup, loads all users from disk into the hash table.
+    \item Thread-safe via \texttt{threading.Lock}.
+\end{itemize}
+
+\subsection{ScheduleStore}
+
+\begin{itemize}[nosep]
+    \item Each student's schedule is stored as \texttt{data/schedules/\{student\_id\}.json}.
+    \item Courses are always sorted by \texttt{(weekday, period\_start, period\_end, name, id)} before saving.
+    \item Provides \texttt{initialize}, \texttt{replace}, \texttt{add\_course}, \texttt{update\_course}, \texttt{delete\_course}.
+    \item Thread-safe via \texttt{threading.Lock}.
+\end{itemize}
+
+\subsection{NoteStore}
+
+\begin{itemize}[nosep]
+    \item Uses SQLite (\texttt{data/notes.db}) for note metadata and chunk storage.
+    \item Provides CRUD for notes and chunks, with filtering by student and course.
+    \item Original uploaded files are stored on disk at \texttt{data/note\_files/\{note\_id\}.\{ext\}}.
+\end{itemize}
+
+\subsection{KnowledgeTreeStore}
+
+\begin{itemize}[nosep]
+    \item Persists the hierarchical topic tree as JSON files per student/course.
+    \item Supports load, save, and deletion operations.
+\end{itemize}
+
+% ═══════════════════════════════════════════════════════════
+\section{Service Layer}
+\label{sec:services}
+
+\subsection{AuthService}
+
+Handles user registration, login, logout, and session validation.
+
+\begin{itemize}[nosep]
+    \item \textbf{Password hashing}: prefers bcrypt via \texttt{passlib}; falls back to PBKDF2-SHA256 (390,000 iterations) if bcrypt is unavailable.
+    \item \textbf{Session management}: generates \texttt{secrets.token\_urlsafe(32)} tokens; stores \texttt{SessionRecord(student\_id, expires\_at)} in the custom \texttt{HashTable}.
+    \item \textbf{Session expiry}: configurable (default 7 days); expired sessions are lazily evicted on access.
+    \item \textbf{Thread safety}: all session mutations are protected by a \texttt{threading.Lock}.
+\end{itemize}
+
+\subsection{ScheduleService}
+
+Core business logic for schedule management:
+
+\begin{itemize}[nosep]
+    \item \textbf{Semester initialization}: validates ISO date format, creates or updates schedule metadata.
+    \item \textbf{Course CRUD}: validates period ranges and week numbers before delegating to storage.
+    \item \textbf{Time-based queries}: computes current week number from \texttt{semester\_start}, determines current period from the system clock against a 12-period timetable, and filters courses by weekday/week/period.
+    \item \textbf{Dashboard overview}: aggregates user info, current course, today's courses, and weekly timetable into a single response to minimize frontend round-trips.
+    \item \textbf{SCNU fetch}: submits scraping tasks to a background thread; tracks task status in a \texttt{HashTable}.
+\end{itemize}
+
+\subsection{SCNUScraper}
+
+Fetches schedules from the SCNU academic portal (\texttt{jwxt.scnu.edu.cn}):
+
+\begin{itemize}[nosep]
+    \item \textbf{Primary path (reverse-engineered API)}: obtains a CSRF token and RSA public key from the login page, encrypts the password with RSA, authenticates via POST, then queries the schedule endpoint for all weeks of the semester.
+    \item \textbf{Fallback path (Playwright)}: uses browser automation to log in via the SSO portal, captures session cookies, then calls the schedule API.
+    \item \textbf{PDF parsing}: uses \texttt{pdfplumber} to extract tabular schedule data from downloaded PDF timetables as a tertiary fallback.
+    \item \textbf{Rate limiting}: tasks are processed serially via the queue to avoid IP blocking.
+\end{itemize}
+
+\subsection{NoteService}
+
+Handles the note upload pipeline:
+
+\begin{enumerate}[nosep]
+    \item Saves the raw file to disk.
+    \item Extracts text using \texttt{pdfplumber} (PDF) or \texttt{python-docx} (DOCX).
+    \item Splits text into chunks using heading-aware segmentation:
+    \begin{itemize}[nosep]
+        \item Regex patterns detect headings (Markdown \texttt{\#}, Chinese chapter markers, numbered sections).
+        \item Long sections are split by paragraph boundaries or hard-truncated at 500 characters with 50-character overlap.
+    \end{itemize}
+    \item Stores note metadata and chunks in the NoteStore.
+\end{enumerate}
+
+\subsection{KnowledgeService}
+
+The most complex service, providing:
+
+\begin{itemize}[nosep]
+    \item \textbf{Vector indexing}: uses mem0 (backed by Qdrant in local disk mode) with the \texttt{paraphrase-multilingual-MiniLM-L12-v2} embedding model (384 dimensions).
+    \item \textbf{Semantic search}: queries the vector store; falls back to lexical (token overlap) search if the vector store is unavailable.
+    \item \textbf{RAG Q\&A}: retrieves top-5 relevant chunks, assembles a prompt, and calls the DeepSeek Chat API. Gracefully degrades to showing raw search results if the LLM is unavailable.
+    \item \textbf{Knowledge tree management}: CRUD for hierarchical topics with parent/child relationships, note assignment, and automatic topic routing.
+    \item \textbf{Topic vector store}: maintains a separate vector index for topics to enable query-to-topic routing.
+    \item \textbf{Knowledge graph construction}: builds a force-directed graph by computing pairwise chunk similarities (vector-based or lexical fallback), filtering edges by a minimum score threshold.
+    \item \textbf{LLM summarization}: generates titles and summaries for uploaded notes via DeepSeek.
+\end{itemize}
+
+% ═══════════════════════════════════════════════════════════
+\section{API Design}
+\label{sec:api}
+
+The system exposes a RESTful API organized into five router modules. All protected endpoints require a valid \texttt{session\_token} cookie.
+
+\subsection{Authentication (\texttt{/auth})}
+
+\begin{longtable}{@{}llp{7cm}@{}}
+\toprule
+\textbf{Method} & \textbf{Endpoint} & \textbf{Description} \\
+\midrule
+\endhead
+POST & \texttt{/auth/register} & Register a new local account (201) \\
+POST & \texttt{/auth/login} & Login; sets \texttt{session\_token} cookie (200) \\
+POST & \texttt{/auth/logout} & Clears session and cookie (204) \\
+GET & \texttt{/auth/me} & Returns current user info (200/401) \\
+\bottomrule
+\end{longtable}
+
+\subsection{Schedule Management (\texttt{/schedule})}
+
+\begin{longtable}{@{}llp{7cm}@{}}
+\toprule
+\textbf{Method} & \textbf{Endpoint} & \textbf{Description} \\
+\midrule
+\endhead
+GET & \texttt{/schedule} & Get full schedule \\
+POST & \texttt{/schedule} & Initialize/update semester metadata \\
+POST & \texttt{/schedule/upload} & Upload JSON or PDF schedule file \\
+POST & \texttt{/schedule/fetch} & Submit async SCNU scraping task (202) \\
+GET & \texttt{/schedule/fetch/\{id\}} & Poll scraping task status \\
+POST & \texttt{/schedule/course} & Add a course manually (201) \\
+PUT & \texttt{/schedule/course/\{id\}} & Update a course \\
+DELETE & \texttt{/schedule/course/\{id\}} & Delete a course (204) \\
+\bottomrule
+\end{longtable}
+
+\subsection{Query (\texttt{/query})}
+
+\begin{longtable}{@{}llp{7cm}@{}}
+\toprule
+\textbf{Method} & \textbf{Endpoint} & \textbf{Description} \\
+\midrule
+\endhead
+GET & \texttt{/query/overview} & Dashboard overview (user + schedule + current/today/week) \\
+GET & \texttt{/query/now} & Current course (or null) \\
+GET & \texttt{/query/today} & Today's courses \\
+GET & \texttt{/query/week} & This week's timetable \\
+GET & \texttt{/query/week/\{offset\}} & Offset week timetable \\
+\bottomrule
+\end{longtable}
+
+\subsection{Notes (\texttt{/note})}
+
+\begin{longtable}{@{}llp{7cm}@{}}
+\toprule
+\textbf{Method} & \textbf{Endpoint} & \textbf{Description} \\
+\midrule
+\endhead
+POST & \texttt{/note/upload} & Upload PDF/DOCX; returns note + chunks (201) \\
+GET & \texttt{/note/list} & List notes (filterable by course) \\
+GET & \texttt{/note/\{id\}} & Get note detail with chunks \\
+PUT & \texttt{/note/\{id\}} & Update note metadata \\
+GET & \texttt{/note/\{id\}/file} & Download original file \\
+DELETE & \texttt{/note/\{id\}} & Delete note and vectors (204) \\
+\bottomrule
+\end{longtable}
+
+\subsection{Knowledge (\texttt{/knowledge})}
+
+\begin{longtable}{@{}llp{7cm}@{}}
+\toprule
+\textbf{Method} & \textbf{Endpoint} & \textbf{Description} \\
+\midrule
+\endhead
+POST & \texttt{/knowledge/search} & Semantic chunk search \\
+POST & \texttt{/knowledge/ask} & RAG Q\&A \\
+GET & \texttt{/knowledge/tree} & Get knowledge topic tree \\
+POST & \texttt{/knowledge/tree/topic} & Create topic \\
+PUT & \texttt{/knowledge/tree/topic/\{id\}} & Update topic \\
+DELETE & \texttt{/knowledge/tree/topic/\{id\}} & Delete topic \\
+POST & \texttt{/knowledge/tree/topic/\{id\}/assign} & Assign note to topic \\
+DELETE & \texttt{/knowledge/tree/topic/\{id\}/assign} & Unassign note \\
+GET & \texttt{/knowledge/graph} & Build and return knowledge graph \\
+\bottomrule
+\end{longtable}
+
+% ═══════════════════════════════════════════════════════════
+\section{Frontend}
+\label{sec:frontend}
+
+The frontend consists of three main pages served as static HTML with Vue\,2 for reactivity:
+
+\begin{enumerate}[nosep]
+    \item \textbf{Login Page} (\texttt{/login} $\to$ \texttt{static/index.html}): registration and login forms. Redirects to dashboard on success.
+    \item \textbf{Dashboard} (\texttt{/dashboard} $\to$ \texttt{static/dashboard.html}): displays current course, today's courses, weekly timetable grid (7 columns $\times$ 12 periods), semester initialization, file import, SCNU fetch, and course CRUD.
+    \item \textbf{Knowledge Workspace} (\texttt{/knowledge-workspace} $\to$ \texttt{static/knowledge\_workspace.html}): per-course workspace with note upload, topic tree management, document preview (mammoth.js for DOCX), semantic search, RAG Q\&A, and knowledge graph visualization (Cytoscape.js).
+\end{enumerate}
+
+\textbf{Key frontend libraries} (loaded from \texttt{node\_modules} via static mounts):
+\begin{itemize}[nosep]
+    \item Vue\,2 --- reactive data binding and component logic.
+    \item Cytoscape.js --- knowledge graph rendering (force-directed layout).
+    \item Mammoth.js --- DOCX-to-HTML conversion for in-browser preview.
+\end{itemize}
+
+\textbf{Authentication flow}: all \texttt{fetch()} calls include \texttt{credentials: "include"} to send the session cookie. Protected pages are server-guarded: the backend returns a redirect to \texttt{/login} if the cookie is missing or invalid.
+
+% ═══════════════════════════════════════════════════════════
+\section{SCNU Academic Portal Integration}
+\label{sec:scnu}
+
+The system integrates with the SCNU academic portal (\texttt{jwxt.scnu.edu.cn}) to automatically import student schedules.
+
+\subsection{Primary Path: Reverse-Engineered API}
+
+\begin{enumerate}[nosep]
+    \item \textbf{GET login page}: extract CSRF token from HTML.
+    \item \textbf{GET public key}: retrieve RSA modulus and exponent from \texttt{/xtgl/login\_getPublicKey.html}.
+    \item \textbf{Encrypt password}: RSA-encrypt the plaintext password using the retrieved public key.
+    \item \textbf{POST login}: submit student ID, encrypted password, and CSRF token.
+    \item \textbf{GET schedule}: query \texttt{/kbcx/xskbcx\_cxXsgrkb.html} with semester and week parameters.
+    \item \textbf{Parse response}: extract course fields (name, teacher, location, periods, weeks) from the JSON response and normalize into \texttt{Course} objects.
+\end{enumerate}
+
+\subsection{Fallback Path: Playwright Browser Automation}
+
+When the reverse-engineered API fails (e.g., due to portal updates), the system falls back to Playwright:
+\begin{enumerate}[nosep]
+    \item Launch a headless Chromium browser.
+    \item Navigate to the SSO authentication URL.
+    \item Fill in credentials and submit the login form.
+    \item Wait for redirect to the academic portal.
+    \item Extract session cookies from the browser context.
+    \item Use the cookies to call the schedule API via \texttt{requests}.
+\end{enumerate}
+
+\subsection{Tertiary Path: PDF Upload}
+
+Users can manually download their schedule PDF from the portal and upload it. The system uses \texttt{pdfplumber} to extract the timetable grid and regex patterns to parse course information from cell text.
+
+% ═══════════════════════════════════════════════════════════
+\section{Knowledge Module Architecture}
+\label{sec:knowledge}
+
+The knowledge module extends the schedule system into a learning tool. Its architecture combines document processing, vector search, LLM integration, and graph visualization.
+
+\subsection{Document Processing Pipeline}
+
+\begin{verbatim}
+Upload (PDF/DOCX)
+  -> Save raw file to disk
+  -> Extract text (pdfplumber / python-docx)
+  -> Chunk text (heading-aware segmentation, max 500 chars)
+  -> Store metadata + chunks in SQLite
+  -> Index chunks in Qdrant vector store (via mem0)
+  -> Generate title/summary via DeepSeek LLM
+  -> Auto-assign to best-matching topic
+\end{verbatim}
+
+\subsection{Vector Storage}
+
+\begin{itemize}[nosep]
+    \item \textbf{Engine}: Qdrant (local disk mode, no external server required).
+    \item \textbf{Wrapper}: mem0 library handles embedding generation and vector CRUD.
+    \item \textbf{Embedding model}: \texttt{sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2} (384-dim, multilingual, supports Chinese).
+    \item \textbf{Isolation}: vectors are partitioned by \texttt{user\_id} (student ID).
+    \item \textbf{Graceful degradation}: if the vector store fails to initialize (e.g., missing model cache), the system falls back to lexical search.
+\end{itemize}
+
+\subsection{RAG (Retrieval-Augmented Generation)}
+
+\begin{enumerate}[nosep]
+    \item User submits a question via \texttt{POST /knowledge/ask}.
+    \item System retrieves top-5 semantically similar chunks from the vector store.
+    \item Chunks are assembled into a context prompt.
+    \item The prompt is sent to DeepSeek Chat API (\texttt{deepseek-chat} model).
+    \item The LLM generates an answer grounded in the retrieved context.
+    \item Response includes both the answer and source chunk references.
+\end{enumerate}
+
+\subsection{Knowledge Graph}
+
+The graph is built on-demand via \texttt{GET /knowledge/graph}:
+\begin{itemize}[nosep]
+    \item \textbf{Nodes}: each chunk becomes a node, labeled by its heading.
+    \item \textbf{Edges}: computed by pairwise semantic similarity (vector cosine) or lexical overlap as fallback. Only edges exceeding a configurable threshold are retained.
+    \item \textbf{Topic routing}: if a query is provided, the system first identifies relevant topics via the topic vector store, then restricts the graph to chunks belonging to those topics.
+    \item \textbf{Rendering}: the frontend uses Cytoscape.js with a force-directed (CoSE) layout.
+\end{itemize}
+
+\subsection{Topic Tree}
+
+The knowledge tree provides hierarchical organization:
+\begin{itemize}[nosep]
+    \item Topics can be nested (parent/child relationships).
+    \item Notes are assigned to topics (manually or automatically via vector similarity).
+    \item Topic vectors are maintained in a separate Qdrant collection for query routing.
+    \item Deleting a topic promotes its children to the parent level and reassigns notes.
+\end{itemize}
+
+% ═══════════════════════════════════════════════════════════
+\section{Testing}
+\label{sec:testing}
+
+The project maintains a comprehensive test suite with approximately 3,000 lines of test code across 16 test modules.
+
+\subsection{Test Categories}
+
+\begin{table}[H]
+\centering
+\caption{Test modules and coverage areas}
+\begin{tabular}{@{}lp{8cm}@{}}
+\toprule
+\textbf{Module} & \textbf{Coverage} \\
+\midrule
+\texttt{test\_hash\_table.py} & Set/get/delete, collision handling, resize, iteration \\
+\texttt{test\_doubly\_linked\_list.py} & Append, prepend, insert, remove, find, iteration \\
+\texttt{test\_queue.py} & Enqueue, dequeue, empty queue behavior \\
+\texttt{test\_auth\_service.py} & Registration, login, session validation, expiry \\
+\texttt{test\_schedule\_service.py} & CRUD, week calculation, period detection, overview \\
+\texttt{test\_storage.py} & Atomic file I/O, user store, schedule store \\
+\texttt{test\_api.py} & Integration tests via FastAPI TestClient \\
+\texttt{test\_note\_service.py} & Upload, text extraction, chunking logic \\
+\texttt{test\_note\_store.py} & SQLite CRUD for notes and chunks \\
+\texttt{test\_knowledge\_service.py} & Vector indexing, search, RAG, graph building \\
+\texttt{test\_knowledge\_tree.py} & Topic CRUD, hierarchy, assignment \\
+\texttt{test\_knowledge\_graph.py} & Graph construction, edge filtering, topic routing \\
+\texttt{test\_note\_knowledge\_integration.py} & End-to-end: upload $\to$ index $\to$ search $\to$ ask \\
+\texttt{test\_scnu\_playwright.py} & Playwright-based scraper (mocked) \\
+\texttt{test\_browser\_e2e.py} & Full browser E2E flow \\
+\texttt{test\_logging\_config.py} & Log file rotation and formatting \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Testing Strategy}
+
+\begin{itemize}[nosep]
+    \item \textbf{Unit tests}: isolated testing of data structures and service methods with mocked dependencies.
+    \item \textbf{Integration tests}: FastAPI \texttt{TestClient} for API endpoint testing with real storage (temporary directories).
+    \item \textbf{Browser E2E}: Playwright-based tests that exercise the full user flow from login through knowledge workspace operations.
+    \item \textbf{Fixtures}: shared \texttt{conftest.py} provides temporary data directories, pre-configured services, and test users.
+\end{itemize}
+
+\subsection{Running Tests}
+
+\begin{lstlisting}[language=bash]
+# Activate virtual environment
+python_env\Scripts\activate
+
+# Run all tests
+python -m pytest tests/ -v
+
+# Run specific module
+python -m pytest tests/test_hash_table.py -v
+\end{lstlisting}
+
+% ═══════════════════════════════════════════════════════════
+\section{Logging and Observability}
+\label{sec:logging}
+
+The system uses Loguru for structured logging with multiple output sinks:
+
+\begin{itemize}[nosep]
+    \item \textbf{Combined daily log}: all messages at INFO level and above, rotated daily.
+    \item \textbf{HTTP log}: request/response logs with method, path, status code, and duration.
+    \item \textbf{Error log}: ERROR and above, for quick diagnosis.
+    \item \textbf{Failure log}: CRITICAL level, for unrecoverable issues.
+\end{itemize}
+
+An HTTP middleware measures request duration and logs every request with its status code. Application lifecycle events (startup, shutdown, service initialization) are also logged.
+
+% ═══════════════════════════════════════════════════════════
+\section{Deployment and Configuration}
+\label{sec:deploy}
+
+\subsection{Configuration}
+
+All configuration is centralized in \texttt{app/config.py}:
+\begin{itemize}[nosep]
+    \item File paths (data directory, logs, note files, Qdrant DB).
+    \item Session parameters (cookie name, expiry, security flags).
+    \item Class period timetable (12 periods with start/end times).
+    \item SCNU portal URLs and paths.
+    \item DeepSeek API credentials and model selection.
+    \item Text chunking parameters (max length, overlap).
+    \item HuggingFace cache directories (for offline model loading).
+\end{itemize}
+
+\subsection{Running the Application}
+
+\begin{lstlisting}[language=bash]
+# Install dependencies
+pip install -r requirements.txt
+
+# Start the server
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8080
+
+# Access the application
+# Browser: http://127.0.0.1:8080/login
+# API docs: http://127.0.0.1:8080/docs
+\end{lstlisting}
+
+\subsection{Dependencies}
+
+Key Python packages (18 direct dependencies):
+\begin{multicols}{2}
+\begin{itemize}[nosep]
+    \item fastapi
+    \item uvicorn[standard]
+    \item pydantic
+    \item requests
+    \item pdfplumber
+    \item python-multipart
+    \item passlib[bcrypt]
+    \item rsa
+    \item playwright
+    \item loguru
+    \item httpx
+    \item pytest
+    \item python-docx
+    \item mem0ai ($\geq$2.0.0)
+    \item qdrant-client
+    \item sentence-transformers
+    \item openai
+\end{itemize}
+\end{multicols}
+
+% ═══════════════════════════════════════════════════════════
+\section{Design Decisions and Trade-offs}
+\label{sec:decisions}
+
+\begin{enumerate}
+    \item \textbf{File-based storage over databases}: chosen to satisfy the course requirement of implementing custom data structures for indexing. JSON files are human-readable and easy to debug. SQLite is used only for the note module where relational queries are beneficial.
+
+    \item \textbf{In-memory session store}: sessions live in the custom hash table rather than a persistent store. This simplifies the implementation but means sessions are lost on server restart. Acceptable for a course project.
+
+    \item \textbf{Synchronous service layer with threaded tasks}: the SCNU scraper runs in daemon threads rather than using \texttt{asyncio} tasks. This avoids complexity while still providing non-blocking behavior for the user.
+
+    \item \textbf{Graceful degradation}: the knowledge module is designed to work even when external services (LLM, vector store) are unavailable. Search falls back to lexical matching; Q\&A shows raw search results; graph uses token-overlap similarity.
+
+    \item \textbf{Monolithic deployment}: all components run in a single process. This is appropriate for the project scale and simplifies development/testing.
+
+    \item \textbf{Vue\,2 over a modern SPA framework}: chosen for simplicity and CDN availability. No build step is required; the frontend is plain HTML files with inline Vue templates.
+\end{enumerate}
+
+% ═══════════════════════════════════════════════════════════
+\section{Project Highlights}
+\label{sec:highlights}
+
+This section summarizes the key strengths that distinguish our project from a typical course assignment.
+
+\subsection{Solving a Real Problem with Real Data}
+
+Unlike many course projects that operate on synthetic or hard-coded data, our system is designed around a genuine, everyday student need: managing class schedules at SCNU. The entire data pipeline is built on real-world data sources:
+
+\begin{itemize}[nosep]
+    \item The schedule data comes directly from the university's live academic portal (\texttt{jwxt.scnu.edu.cn}), not from fabricated sample files.
+    \item Users authenticate with their own university credentials to fetch their personal timetable---the system processes only the authenticated user's own data.
+    \item The knowledge workspace operates on actual course notes uploaded by the student, producing real semantic search results and AI-generated answers.
+\end{itemize}
+
+This grounding in real data means the system must handle real-world messiness: inconsistent portal responses, network timeouts, varied PDF layouts, and multilingual text in notes.
+
+\subsection{Reverse Engineering and Web Scraping}
+
+Fetching schedule data required substantial reverse-engineering effort:
+
+\begin{itemize}[nosep]
+    \item \textbf{Login flow analysis}: the SCNU academic system uses a multi-step authentication process involving CSRF tokens and RSA-encrypted passwords. We reverse-engineered this flow by inspecting browser network traffic and reimplemented it in Python.
+    \item \textbf{RSA password encryption}: the portal's login page dynamically fetches an RSA public key (modulus + exponent) and encrypts the password client-side before submission. Our scraper replicates this cryptographic step using the \texttt{rsa} library.
+    \item \textbf{API discovery}: the schedule query endpoint, its parameters, and response format were identified through traffic analysis rather than official documentation.
+    \item \textbf{Resilient fallback design}: recognizing that reverse-engineered APIs are inherently fragile, we implemented a three-tier fallback strategy (API $\to$ Playwright browser automation $\to$ PDF upload) to ensure the system remains functional even when the portal changes.
+\end{itemize}
+
+All scraping is performed exclusively on the authenticated user's own account data, respecting the principle of minimal data access.
+
+\subsection{Security Considerations}
+
+The system incorporates security practices appropriate for handling user credentials:
+
+\begin{itemize}[nosep]
+    \item \textbf{Password hashing}: local account passwords are never stored in plaintext. The system uses bcrypt (via passlib) or PBKDF2-SHA256 with 390,000 iterations as a fallback.
+    \item \textbf{RSA credential encryption}: when transmitting university portal credentials to the backend for schedule fetching, the password is encrypted using the portal's RSA public key before network transmission, matching the security model of the portal itself.
+    \item \textbf{Session token security}: session tokens are generated using \texttt{secrets.token\_urlsafe(32)} (cryptographically secure), stored server-side only, and transmitted via \texttt{HttpOnly} cookies to prevent XSS-based token theft.
+    \item \textbf{Backend-guarded routes}: protected pages are enforced at the server level (not merely hidden in the frontend). Unauthenticated requests receive HTTP redirects or 401 responses regardless of how the request is crafted.
+    \item \textbf{No credential persistence}: university portal passwords are used transiently during the scraping task and are never written to disk or logged.
+\end{itemize}
+
+\subsection{Frontend--Backend Separation}
+
+The system follows a clean frontend--backend separation:
+
+\begin{itemize}[nosep]
+    \item The backend exposes a well-defined RESTful JSON API (documented via Swagger/OpenAPI at \texttt{/docs}).
+    \item The frontend communicates exclusively through HTTP endpoints---it has no direct access to storage, data structures, or business logic.
+    \item API endpoints are implementation-agnostic: the frontend does not know (or need to know) whether data is stored in JSON files, SQLite, or a vector database.
+    \item This separation enables independent development and testing of frontend and backend, and would allow replacing the Vue\,2 frontend with a mobile app or alternative UI without backend changes.
+\end{itemize}
+
+\subsection{Note Knowledge Clustering and AI-Assisted Learning}
+
+A distinctive feature of this project is the integrated note knowledge workspace, which transforms static course notes into an actively queryable learning resource:
+
+\begin{itemize}[nosep]
+    \item \textbf{Fast topic-based organization}: students upload PDF or DOCX notes and either manually assign them to topics or let the system auto-route notes to the best-matching topic via vector similarity. This turns a flat pile of files into a structured, course-scoped knowledge tree with minimal manual effort.
+    \item \textbf{Heading-aware automatic chunking}: the note service recognizes common heading styles (Markdown headers, Chinese chapter markers, numbered sections) and splits documents into semantically meaningful chunks rather than arbitrary byte windows, preserving the logical structure of the original note.
+    \item \textbf{Initial RAG capability}: the system implements a basic but functional Retrieval-Augmented Generation pipeline. Questions are answered by first retrieving the top-5 semantically relevant chunks from the student's own notes via vector search, then prompting an LLM to synthesize an answer grounded in that retrieved context---not from the model's pretraining alone.
+    \item \textbf{Cloud LLM integration for Q\&A}: the system connects to the DeepSeek cloud API (OpenAI-compatible) to provide natural-language answering over uploaded notes. This gives students a personal tutor-like experience focused specifically on their own course material, at negligible per-query cost.
+    \item \textbf{Source attribution}: every AI-generated answer is accompanied by the source chunks it was derived from, allowing students to verify the answer against the original material and discouraging blind trust in model output.
+    \item \textbf{Knowledge graph visualization}: chunk-to-chunk similarities are computed and rendered as an interactive force-directed graph, helping students visually identify conceptual clusters and cross-references across their notes.
+    \item \textbf{Offline-capable fallback}: when the cloud LLM or vector store is unavailable, the system gracefully degrades to lexical search and returns raw retrieved chunks, ensuring the workspace remains usable without internet connectivity or API credits.
+\end{itemize}
+
+Together, these capabilities turn the schedule system into a lightweight personal learning platform: students can see what class is happening now, jump directly into its knowledge workspace, upload the day's notes, and immediately search or ask questions across all material for that course.
+
+\subsection{Professional Version Control Practices}
+
+The project uses Git and GitHub following industry-standard workflows:
+
+\begin{itemize}[nosep]
+    \item \textbf{Branch strategy}: development occurs on feature branches (\texttt{feat/service}, \texttt{feat/front}), with \texttt{master} reserved for stable, reviewed code.
+    \item \textbf{Pull Request workflow}: changes are merged via GitHub Pull Requests, enabling code review and discussion before integration.
+    \item \textbf{Meaningful commit messages}: commits describe the intent of changes (e.g., ``feat/service: Refactor logging system to improve testability'') rather than generic labels.
+    \item \textbf{Gitignore discipline}: runtime data, virtual environments, caches, and credentials are excluded from version control.
+    \item \textbf{Collaborative development}: multiple team members contribute to different modules concurrently, with conflicts resolved through standard merge workflows.
+\end{itemize}
+
+\subsection{Production-Grade Engineering Practices}
+
+Beyond the course requirements, the project adopts several practices common in professional software development:
+
+\begin{itemize}[nosep]
+    \item \textbf{Structured logging}: Loguru-based logging with daily rotation, severity-based sinks, and request-level tracing---not just \texttt{print()} statements.
+    \item \textbf{Atomic file operations}: JSON persistence uses write-to-temp-then-rename to prevent data corruption on crashes.
+    \item \textbf{Thread safety}: all shared mutable state is protected by locks, even though the system is single-process.
+    \item \textbf{Graceful degradation}: every external dependency (LLM, vector store, portal API) has a fallback path, ensuring the core system remains functional under partial failure.
+    \item \textbf{Comprehensive test suite}: $\sim$3,000 lines of tests covering unit, integration, and browser E2E scenarios---not just happy-path smoke tests.
+    \item \textbf{Input validation}: Pydantic models enforce type constraints, length limits, and value ranges at the API boundary, preventing malformed data from reaching business logic.
+\end{itemize}
+
+% ═══════════════════════════════════════════════════════════
+\section{Conclusion}
+\label{sec:conclusion}
+
+This project demonstrates the practical application of fundamental data structures within a realistic web application context. The four hand-implemented structures (hash table, doubly linked list, BST, and queue) are not merely academic exercises but serve genuine roles in session management, course indexing, ordered traversal, and task scheduling.
+
+What sets this project apart from a typical course assignment is its commitment to solving a real problem with real data. Rather than operating on fabricated inputs, the system reverse-engineers a live university portal, handles actual user credentials securely, and processes real course notes. This grounding in reality forced us to confront challenges---authentication protocols, API fragility, data inconsistency, security obligations---that purely academic projects never encounter.
+
+Beyond the core OOP requirements, the system extends into modern software engineering territory with:
+\begin{itemize}[nosep]
+    \item A clean layered architecture with strict frontend--backend separation.
+    \item RESTful API design with comprehensive endpoint coverage and auto-generated documentation.
+    \item Reverse-engineered integration with the SCNU academic portal, with multi-tier fallbacks.
+    \item Security-conscious credential handling (RSA encryption, bcrypt/PBKDF2 hashing, HttpOnly cookies).
+    \item AI-powered features (vector search, RAG, knowledge graphs) with graceful degradation.
+    \item A lightweight personal learning workspace: topic-based note clustering, initial RAG pipeline, and cloud-LLM-assisted Q\&A grounded in the student's own notes.
+    \item Professional version control via Git/GitHub with branching, PRs, and code review.
+    \item A thorough test suite covering unit, integration, and E2E scenarios.
+    \item Structured logging, atomic persistence, and thread-safe shared state.
+\end{itemize}
+
+The result is a functional prototype that a student could use daily to manage their schedule and course knowledge, while also serving as a demonstration of OOP principles, software architecture, and modern development practices.
+
+\end{document}
