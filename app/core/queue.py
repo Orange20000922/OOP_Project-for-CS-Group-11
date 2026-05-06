@@ -3,7 +3,7 @@ class Node:
         self.value = value
         self.next = None
 
-
+# 基于链表实现的队列 ，用于生产者消费者模型、有限并发控制等场景
 class Queue:
     def __init__(self):
         self.head = None

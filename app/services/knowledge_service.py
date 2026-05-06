@@ -12,6 +12,7 @@ from app.config import (
     DEEPSEEK_MODEL,
     QDRANT_DB_DIR,
 )
+from app.core import Stack
 from app.logging_config import logger
 from app.models.knowledge import KnowledgeTopic, KnowledgeTopicCreate, KnowledgeTopicUpdate, KnowledgeTree
 from app.models.note import (
@@ -209,10 +210,13 @@ class KnowledgeService:
             self._append_unique(tree.root_ids, topic.id)
 
     def _collect_descendant_topic_ids(self, tree: KnowledgeTree, topic_id: str) -> list[str]:
+        """使用栈进行深度优先遍历收集所有后代主题 ID"""
         ordered: list[str] = []
-        stack = [topic_id]
+        stack = Stack()
+        stack.push(topic_id)
         seen: set[str] = set()
-        while stack:
+
+        while not stack.is_empty():
             current = stack.pop()
             if current in seen:
                 continue
@@ -221,7 +225,9 @@ class KnowledgeService:
             if topic is None:
                 continue
             ordered.append(current)
-            stack.extend(reversed(topic.child_ids))
+            # 逆序压栈以保持深度优先的左到右顺序
+            for child_id in reversed(topic.child_ids):
+                stack.push(child_id)
         return ordered
 
     def _topic_has_descendant(
