@@ -7,14 +7,14 @@ from app.services import auth_service, knowledge_service
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
-
+# 统一的学生身份验证函数
 def _require_student_id(session_token: str | None) -> str:
     try:
         return auth_service.get_student_id(session_token)
     except PermissionError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
-
+# 知识树相关接口 - 包括搜索、问答、知识树管理等
 @router.post("/search", response_model=list[SearchResult])
 async def search_knowledge(
     body: SearchRequest,

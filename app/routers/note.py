@@ -14,7 +14,7 @@ def _require_student_id(session_token: str | None) -> str:
     except PermissionError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
-
+# 笔记相关接口 - 包括上传、查询、更新、删除等
 @router.post("/upload", response_model=NoteDetail, status_code=status.HTTP_201_CREATED)
 async def upload_note(
     file: UploadFile = File(...),
@@ -31,7 +31,7 @@ async def upload_note(
         try:
             knowledge_service.index_chunks(student_id, detail.chunks)
         except Exception:
-            pass  # 向量索引失败不阻塞上传
+            pass 
 
         # 异步生成摘要（best-effort）
         try:
