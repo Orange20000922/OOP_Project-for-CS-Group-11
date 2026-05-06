@@ -16,6 +16,7 @@ from app.config import (
     USERS_FILE,
 )
 from app.logging_config import build_log_targets, configure_logging, logger
+from app.middleware import SQLInjectionProtectionMiddleware
 from app.routers import auth, knowledge, note, query, schedule
 from app.services import auth_service, shutdown_services
 
@@ -52,6 +53,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# 注册 SQL 注入防护中间件
+app.add_middleware(SQLInjectionProtectionMiddleware)
 
 app.include_router(auth.router)
 app.include_router(schedule.router)

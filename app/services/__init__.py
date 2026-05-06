@@ -1,3 +1,4 @@
+# 服务层入口
 from app.services.auth_service import AuthService
 from app.services.knowledge_service import KnowledgeService
 from app.services.note_service import NoteService
@@ -17,7 +18,7 @@ schedule_service = ScheduleService(schedule_store, scnu_scraper)
 note_service = NoteService(note_store)
 knowledge_service = KnowledgeService(note_store)
 
-
+# 优雅退出函数
 def shutdown_services() -> None:
     try:
         knowledge_service.close()

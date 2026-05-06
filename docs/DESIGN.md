@@ -8,6 +8,7 @@
 - 根据系统时间查询当前/今日/本周课程
 - 自定义文件存储层（不使用数据库 ORM/API）
 - 课程要求：手动实现双向链表、二叉查找树、哈希表、队列
+- **扩展功能**：课程笔记上传、语义检索、RAG 问答、知识图谱可视化
 
 ---
 
@@ -28,27 +29,42 @@ OOP_project/                     # 项目根目录
 │   │
 │   ├── models/                  # Pydantic 数据模型（用于请求/响应校验）
 │   │   ├── user.py              # User, UserCreate, UserLogin
-│   │   └── course.py            # Course, Schedule, QueryResult
+│   │   ├── course.py            # Course, Schedule, QueryResult
+│   │   ├── note.py              # Note, NoteChunk, SearchResult
+│   │   └── knowledge.py         # KnowledgeTopic, KnowledgeTree
 │   │
 │   ├── storage/                 # 文件存储层（替代数据库）
 │   │   ├── file_io.py           # JSON 文件原子读写基础操作
 │   │   ├── user_store.py        # 用户持久化（哈希表索引 + 文件）
-│   │   └── schedule_store.py    # 课表持久化（BST + 双向链表 + 文件）
+│   │   ├── schedule_store.py    # 课表持久化（BST + 双向链表 + 文件）
+│   │   ├── schedule_index.py    # 课表索引层（DLL + BST 封装）
+│   │   ├── note_store.py        # 笔记元数据（SQLite）
+│   │   └── knowledge_tree_store.py # 知识树持久化（JSON）
 │   │
 │   ├── services/                # 业务逻辑层
 │   │   ├── auth_service.py      # Cookie/Session 认证逻辑
 │   │   ├── schedule_service.py  # 课表 CRUD、当前课程查询逻辑
-│   │   └── scnu_scraper.py      # SCNU 强智 API 抓取 + PDF 解析（次选）
+│   │   ├── scnu_scraper.py      # SCNU 强智 API 抓取 + PDF 解析（次选）
+│   │   ├── fetch_queue.py       # 抓取任务队列（Queue 实现）
+│   │   ├── note_service.py      # 笔记上传、文本提取、切片
+│   │   ├── knowledge_service.py # 向量检索、RAG、知识图谱
+│   │   └── topic_vector_store.py # 主题向量索引
 │   │
 │   └── routers/                 # FastAPI 路由（薄层，调用 services）
 │       ├── auth.py              # /auth/*
 │       ├── schedule.py          # /schedule/*
-│       └── query.py             # /query/*
+│       ├── query.py             # /query/*
+│       ├── note.py              # /note/*
+│       └── knowledge.py         # /knowledge/*
 │
 ├── data/                        # 持久化文件（运行时自动生成）
 │   ├── users.json               # 所有用户记录
-│   └── schedules/
-│       └── {student_id}.json    # 每个用户的课表
+│   ├── schedules/
+│   │   └── {student_id}.json    # 每个用户的课表
+│   ├── notes.db                 # SQLite（笔记元数据 + 切片）
+│   ├── note_files/              # 原始上传文件
+│   ├── knowledge_trees/         # 知识树 JSON
+│   └── qdrant_db/               # Qdrant 向量库（本地磁盘模式）
 │
 ├── static/                      # 前端页面（登录页 + 课表工作台 + 知识工作台）
 │   ├── index.html               # /login，登录/注册入口
@@ -60,6 +76,14 @@ OOP_project/                     # 项目根目录
 │   ├── dashboard-vue.js
 │   └── knowledge-workspace.js
 │
+├── tests/                       # 单元测试和集成测试
+│   ├── test_bst.py              # BST 测试
+│   ├── test_doubly_linked_list.py # 双向链表测试
+│   ├── test_hash_table.py       # 哈希表测试
+│   ├── test_queue.py            # 队列测试
+│   ├── test_schedule_index.py   # 索引层集成测试
+│   └── test_fetch_queue.py      # 任务队列测试
+│
 └── requirements.txt
 ```
 
@@ -67,12 +91,12 @@ OOP_project/                     # 项目根目录
 
 ## 数据结构用途分配
 
-| 数据结构 | 绑定场景 | 说明 |
-|---------|---------|------|
-| **哈希表** | Session 管理 `token → {student_id, expires}`；用户索引 `学号 → User` | O(1) 身份验证，适合每次请求都需要的认证查找 |
-| **双向链表** | 每个用户的课程列表（按周-天-节次排序） | 支持前后周导航，插入/删除节点 O(1) |
-| **二叉查找树** | 课程时间索引，key = `weekday * 100 + period_start` | O(log n) 查找"当前节次有哪门课" |
-| **队列** | SCNU 教务平台抓取任务队列（异步串行） | 限速、防并发，避免被教务系统封 IP |
+| 数据结构 | 绑定场景 | 说明 | 实现状态 |
+|---------|---------|------|---------|
+| **哈希表** | Session 管理 `token → {student_id, expires}`；用户索引 `学号 → User`；课表索引缓存 `student_id → ScheduleIndex` | O(1) 身份验证，适合每次请求都需要的认证查找 | ✅ 已集成 |
+| **双向链表** | 每个用户的课程列表（按周-天-节次排序） | 支持前后周导航，插入/删除节点 O(1)，遍历今日课程 | ✅ 已集成 |
+| **二叉查找树** | 课程时间索引，key = `weekday * 100 + period_start` | O(log n) 查找"当前节次有哪门课" | ✅ 已集成 |
+| **队列** | SCNU 教务平台抓取任务队列（生产者-消费者模式） | 有限并发（2 workers），限速、防并发，避免被教务系统封 IP | ✅ 已集成 |
 
 ---
 
@@ -197,22 +221,34 @@ class User:
        └─ 存入 HashTable(sessions)  key=token, value={student_id, expires}
        └─ 响应 Set-Cookie: session_token=...
 
-GET /query/now
+GET /query/now（查询当前课程）
   └─ 读 Cookie → HashTable(sessions).get(token) → student_id
-       └─ ScheduleStore.get(student_id) → 加载该用户 BST
+       └─ ScheduleStore.get_index(student_id) → ScheduleIndex
        └─ 计算当前周次、星期、节次
-       └─ BST.search(weekday*100 + period) → Course
+       └─ BST.search(weekday*100 + period) → Course（O(log n)）
+       └─ 验证课程是否在当前周次上课
+
+GET /query/today（查询今日课程）
+  └─ ScheduleStore.get_index(student_id) → ScheduleIndex
+       └─ DoublyLinkedList 遍历当天课程（按时间排序）
+       └─ 过滤周次匹配的课程
 
 POST /schedule/fetch (SCNU 强智 API 抓取)
-  └─ 将任务 {student_id, scnu_credential} 入队 TaskQueue
-       └─ 后台线程消费队列 → SCNUScraper.fetch() → 解析课程
-       └─ 更新内存 DoublyLinkedList + BST → 写 JSON 文件
+  └─ 创建 FetchTask {task_id, student_id, handler}
+       └─ 提交到 FetchQueue（Queue 实现）
+       └─ 2 个 worker 线程并发消费队列
+       └─ 每个任务间隔 2 秒（防止被封）
+       └─ SCNUScraper.fetch() → 解析课程
+       └─ 更新 ScheduleStore → 重建 DoublyLinkedList + BST 索引
 
-课表文件加载（每用户首次访问时懒加载）
-  └─ 读 data/schedules/{student_id}.json
+课表文件加载（懒加载）
+  └─ 首次访问 ScheduleStore.get(student_id)
+       └─ 读 data/schedules/{student_id}.json
        └─ 反序列化为 Course 列表
-       └─ 按 (weekday, period_start) 排序后插入 DoublyLinkedList
-       └─ 同步建立 BST 时间索引
+       └─ 构建 ScheduleIndex：
+            ├─ 按 (weekday, period_start) 排序后插入 DoublyLinkedList
+            └─ 同步建立 BST 时间索引
+       └─ 缓存到 HashTable(index_cache)
 ```
 
 ---
@@ -361,11 +397,78 @@ passlib[bcrypt]   # 密码哈希（可替换为 hashlib + SHA-256）
 
 ## 实现优先级
 
-1. `core/` 四个数据结构 → 写测试验证正确性
-2. `storage/` 存储层（文件读写 + 数据结构封装）
-3. 认证路由 `/auth/register` `/auth/login`
-4. 课表 CRUD（手动上传优先）
-5. 查询路由 `/query/now` `/query/today` `/query/week`
-6. 前端页面
-7. SCNU 强智 API 抓取（参考 iscnu/scnu-schedule-ical-jwxt；最后做，受接口变动影响）
-8. PDF 解析（次选路径，参考 lgbgbl/Timetable-PDF-ICS；使用 pdfplumber + 正则）
+1. `core/` 四个数据结构 → 写测试验证正确性 ✅
+2. `storage/` 存储层（文件读写 + 数据结构封装）✅
+3. 认证路由 `/auth/register` `/auth/login` ✅
+4. 课表 CRUD（手动上传优先）✅
+5. 查询路由 `/query/now` `/query/today` `/query/week` ✅
+6. 前端页面 ✅
+7. SCNU 强智 API 抓取（参考 iscnu/scnu-schedule-ical-jwxt；最后做，受接口变动影响）✅
+8. PDF 解析（次选路径，参考 lgbgbl/Timetable-PDF-ICS；使用 pdfplumber + 正则）✅
+9. 笔记知识库模块（扩展功能）✅
+
+---
+
+## 笔记知识库模块（扩展功能）
+
+### 概述
+
+在课表管理基础上扩展了"课程笔记 + 知识检索"功能。用户可上传课程笔记（PDF/DOCX），系统自动提取文本、按标题切片、建立向量索引，支持语义检索、RAG 问答和知识图谱可视化。
+
+### 核心功能
+
+1. **笔记管理** (`/note/*`)
+   - 上传 PDF/DOCX 文件，自动提取文本并切片
+   - 关联到课程，支持编辑元信息和删除
+   - 原始文件下载和预览
+
+2. **知识检索** (`/knowledge/search`)
+   - 基于 Qdrant 向量库的语义搜索
+   - 使用 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` 生成 384 维向量
+   - 按学生和课程隔离数据
+
+3. **RAG 问答** (`/knowledge/ask`)
+   - 检索相关切片 + DeepSeek Chat API 生成回答
+   - LLM 不可用时降级为返回检索结果原文
+
+4. **知识图谱** (`/knowledge/graph`)
+   - 计算切片间语义相似度构建图结构
+   - 前端使用 Cytoscape.js 力导向布局渲染
+   - 支持按主题着色分组
+
+5. **知识树管理** (`/knowledge/tree/*`)
+   - 层级主题结构（支持父子关系）
+   - 笔记关联到主题，支持查询路由优化
+   - 主题向量索引用于智能匹配
+
+### 技术栈
+
+- **向量库**: Qdrant（本地磁盘模式）
+- **向量管理**: mem0 库（统一 embedding 生成和向量 CRUD）
+- **Embedding 模型**: sentence-transformers（384 维，支持中文）
+- **LLM**: DeepSeek Chat（OpenAI 兼容接口）
+- **文本提取**: pdfplumber（PDF）、python-docx（DOCX）
+- **前端图谱**: Cytoscape.js、mammoth.js（DOCX 预览）
+
+### 数据模型
+
+- **Note**: 笔记元数据（标题、摘要、文件类型、关联课程）
+- **NoteChunk**: 笔记切片（标题、内容、索引位置）
+- **KnowledgeTopic**: 知识主题（名称、父子关系、关联笔记、关键词）
+- **KnowledgeTree**: 知识树（按课程隔离的主题层级结构）
+
+### 存储方案
+
+- 笔记元数据和切片：SQLite (`data/notes.db`)
+- 原始文件：文件系统 (`data/note_files/`)
+- 向量索引：Qdrant (`data/qdrant_db/`)
+- 知识树：JSON 文件 (`data/knowledge_trees/`)
+
+### 文本切片策略
+
+1. 标题识别：正则匹配 Markdown 标题、中文章节标记、数字序号等
+2. 按标题拆分文档为段落组
+3. 超长段落（>500 字）按空行拆分，仍超长则硬截断（50 字重叠）
+4. 无标题时按固定窗口（500 字 + 50 字重叠）切片
+
+详细设计见 `docs/NOTE_KNOWLEDGE_DESIGN.md`

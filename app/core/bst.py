@@ -13,6 +13,9 @@ class BSTNode(Generic[K, V]):
         self.right: BSTNode[K, V] | None = None
 
 class BinarySearchTree(Generic[K, V]):
+    def __init__(self):
+        self.root: BSTNode[K, V] | None = None
+
     def insert(self, key: K, value: V) -> None:
         def _insert(node: BSTNode[K, V] | None, key: K, value: V) -> BSTNode[K, V]:
             if node is None:

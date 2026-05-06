@@ -6,7 +6,6 @@ DATA_DIR = BASE_DIR / "data"
 SCHEDULES_DIR = DATA_DIR / "schedules"
 USERS_FILE = DATA_DIR / "users.json"
 LOGS_DIR = DATA_DIR / "logs"
-# Base log file name; logging_config.py expands this into combined/http/errors/failures sinks.
 APP_LOG_FILE = LOGS_DIR / "app.log"
 STATIC_DIR = BASE_DIR / "static"
 NOTES_DB_PATH = DATA_DIR / "notes.db"
@@ -31,12 +30,12 @@ os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(SENTENCE_TRANSFORMERS_CA
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
-# DeepSeek LLM
+# DeepSeek LLM配置
 DEEPSEEK_API_KEY = ""
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 DEEPSEEK_MODEL = "deepseek-chat"
 
-# Text chunking
+# 笔记文本解析配置
 CHUNK_MAX_LENGTH = 500
 CHUNK_OVERLAP = 50
 
@@ -46,7 +45,7 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "lax"
 SESSION_COOKIE_SECURE = False
 
-# Class period time ranges: period -> (start_time, end_time)
+# 课程时间表
 PERIOD_TIMES: dict[int, tuple[str, str]] = {
     1: ("08:00", "08:45"),
     2: ("08:50", "09:35"),
@@ -62,13 +61,13 @@ PERIOD_TIMES: dict[int, tuple[str, str]] = {
     12: ("19:20", "20:05"),
 }
 
-# SCNU academic system
+# SCNU教务系统抓取配置
 SCNU_JWXT_BASE = "https://jwxt.scnu.edu.cn"
 SCNU_LOGIN_PATH = "/xtgl/login_slogin.html"
 SCNU_PUBLIC_KEY_PATH = "/xtgl/login_getPublicKey.html"
 SCNU_SCHEDULE_QUERY_PATH = "/kbcx/xskbcx_cxXsgrkb.html"
 
-# SCNU SSO auth URL used by the Playwright fallback path
+# SCNU SSO 认证 URL，用于 Playwright 回退路径
 SCNU_SSO_AUTH_URL = (
     "https://sso.scnu.edu.cn/AccountService/openapi/auth.html"
     "?client_id=9347e8e342e93da94c8ecf27a9de2599"

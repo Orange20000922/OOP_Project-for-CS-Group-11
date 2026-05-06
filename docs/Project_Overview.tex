@@ -799,7 +799,18 @@ Fetching schedule data required substantial reverse-engineering effort:
     \item \textbf{Resilient fallback design}: recognizing that reverse-engineered APIs are inherently fragile, we implemented a three-tier fallback strategy (API $\to$ Playwright browser automation $\to$ PDF upload) to ensure the system remains functional even when the portal changes.
 \end{itemize}
 
-All scraping is performed exclusively on the authenticated user's own account data, respecting the principle of minimal data access.
+\paragraph{Compliance Statement.}
+All reverse-engineering and scraping work in this project was carried out exclusively through legitimate, non-intrusive technical means:
+\begin{itemize}[nosep]
+    \item \textbf{Observable traffic only}: analysis was limited to HTTP request/response headers and bodies captured via standard browser developer tools during normal, authenticated use of the portal by the student's own account.
+    \item \textbf{Frontend debugging only}: JavaScript logic (such as the client-side RSA encryption step) was understood by reading the portal's publicly delivered frontend source code in the browser debugger---exactly the same information any visitor receives.
+    \item \textbf{No exploitation}: the project does \emph{not} rely on, attempt to discover, or make use of any security vulnerability, bug exploit, privilege escalation, authentication bypass, or cryptographic break against the university or college systems.
+    \item \textbf{No credentials of others}: the scraper only operates with credentials that the authenticated user voluntarily provides for their own account. It never attempts to access other users' data, enumerate accounts, or brute-force credentials.
+    \item \textbf{Behaviorally equivalent to a human user}: from the portal's perspective, our requests are indistinguishable in content and intent from a student manually logging in and viewing their own schedule---only the client is automated. Requests are rate-limited (serialized through a queue) to avoid placing undue load on the portal.
+    \item \textbf{Respectful fallbacks}: when the reverse-engineered API changes or is unavailable, the system falls back to Playwright (a legitimate browser driving the same public login flow) or, ultimately, to manual PDF upload by the user. At no point does the system attempt to defeat anti-bot measures through illicit means.
+\end{itemize}
+
+In short, every technique used here is standard web-development practice: traffic inspection, frontend debugging, and replaying well-formed HTTP requests. The project produces no tools, payloads, or techniques that could be used to compromise the portal, and all scraping is performed exclusively on the authenticated user's own account data.
 
 \subsection{Security Considerations}
 

@@ -1,5 +1,5 @@
+# 笔记存储层，使用 SQLite 数据库进行持久化存储
 from __future__ import annotations
-
 import sqlite3
 from pathlib import Path
 from threading import Lock
@@ -15,14 +15,14 @@ class NoteStore:
         self._lock = Lock()
         self._init_db()
         logger.debug("NoteStore initialized with {}", self._db_path)
-
+    # 数据库连接与初始化逻辑，确保线程安全
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
-
+    # 数据访问方法，提供增删改查接口
     def _init_db(self) -> None:
         Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:

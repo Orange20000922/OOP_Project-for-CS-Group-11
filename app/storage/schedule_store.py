@@ -4,9 +4,11 @@ from threading import Lock
 from uuid import uuid4
 
 from app.config import SCHEDULES_DIR
+from app.core import HashTable
 from app.logging_config import logger
 from app.models.course import Course, CourseCreate, Schedule
 from app.storage.file_io import model_to_dict, read_json, write_json_atomic
+from app.storage.schedule_index import ScheduleIndex
 
 
 def _sort_courses(courses: list[Course]) -> list[Course]:
@@ -26,6 +28,8 @@ class ScheduleStore:
     def __init__(self) -> None:
         self._lock = Lock()
         SCHEDULES_DIR.mkdir(parents=True, exist_ok=True)
+        # 使用 HashTable 缓存每个学生的课表索引
+        self._index_cache = HashTable[str, ScheduleIndex](bucket_count=32)
         logger.debug("ScheduleStore initialized with {}", SCHEDULES_DIR)
 
     def _path_for(self, student_id: str):
@@ -35,7 +39,26 @@ class ScheduleStore:
         path = self._path_for(student_id)
         if not path.exists():
             return None
-        return Schedule(**read_json(path, {}))
+        schedule = Schedule(**read_json(path, {}))
+        # 懒加载：首次访问时构建索引
+        if student_id not in self._index_cache:
+            self._build_index(student_id, schedule.courses)
+        return schedule
+
+    def _build_index(self, student_id: str, courses: list[Course]) -> None:
+        """构建课表索引（DLL + BST）"""
+        index = ScheduleIndex()
+        index.rebuild_from_courses(courses)
+        self._index_cache[student_id] = index
+        logger.debug("Built schedule index for {} with {} courses", student_id, len(courses))
+
+    def get_index(self, student_id: str) -> ScheduleIndex | None:
+        """获取学生的课表索引（用于快速查询）"""
+        # 确保索引已加载
+        schedule = self.get(student_id)
+        if schedule is None:
+            return None
+        return self._index_cache.get(student_id)
 
     def save(self, schedule: Schedule) -> Schedule:
         normalized = Schedule(
@@ -45,6 +68,8 @@ class ScheduleStore:
             courses=_sort_courses(schedule.courses),
         )
         write_json_atomic(self._path_for(schedule.student_id), model_to_dict(normalized))
+        # 更新索引缓存
+        self._build_index(schedule.student_id, normalized.courses)
         logger.info(
             "Saved schedule for {} with {} courses",
             schedule.student_id,

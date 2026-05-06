@@ -9,7 +9,7 @@ from app.config import CHUNK_MAX_LENGTH, CHUNK_OVERLAP, NOTE_FILES_DIR
 from app.logging_config import logger
 from app.models.note import Note, NoteChunk, NoteDetail, NoteUpdate
 from app.storage.note_store import NoteStore
-
+# 文本提取与切片逻辑
 HEADING_PATTERNS = [
     re.compile(r"^#{1,3}\s+.+"),
     re.compile(r"^第[一二三四五六七八九十\d]+[章节部分]"),

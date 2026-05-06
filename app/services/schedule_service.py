@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from threading import Lock, Thread
+from threading import Lock
 from uuid import uuid4
 
 from app.config import PERIOD_TIMES
@@ -21,6 +21,7 @@ from app.models.course import (
 from app.models.user import UserInfo
 from app.storage.file_io import model_to_dict
 from app.storage.schedule_store import ScheduleStore
+from app.services.fetch_queue import FetchQueue, FetchTask
 from app.services.scnu_scraper import SCNUScraper
 
 # 课表服务：提供课表管理、当前课程查询、以及与教务系统交互的功能
@@ -30,7 +31,8 @@ class ScheduleService:
         self._scnu_scraper = scnu_scraper
         self._tasks = HashTable[str, FetchTaskStatus](bucket_count=32)
         self._task_lock = Lock()
-        logger.debug("ScheduleService initialized")
+        self._fetch_queue = FetchQueue(max_workers=2, delay_between_tasks=2.0)
+        logger.debug("ScheduleService initialized with FetchQueue")
 
     def get_schedule(self, student_id: str) -> Schedule:
         schedule = self._schedule_store.get(student_id)
@@ -99,16 +101,37 @@ class ScheduleService:
         current_period = self._find_period(datetime.now().time())
         if current_period is None:
             return None
-        for course in self._iter_courses_for_day(schedule, week_number, weekday):
-            if course.period_start <= current_period <= course.period_end:
-                return course
+
+        # 使用 BST 进行 O(log n) 查找
+        index = self._schedule_store.get_index(student_id)
+        if index is None:
+            return None
+
+        course = index.find_course_at_time(weekday, current_period)
+        if course is None:
+            return None
+
+        # 验证课程是否在当前周次上课
+        if not self._course_matches_week(course, week_number):
+            return None
+
+        # 验证当前节次是否在课程时间范围内
+        if course.period_start <= current_period <= course.period_end:
+            return course
+
         return None
 
     def get_today_courses(self, student_id: str) -> list[Course]:
         schedule = self.get_schedule(student_id)
         today = date.today()
         week_number = self._calculate_week_number(schedule.semester_start, today)
-        return list(self._iter_courses_for_day(schedule, week_number, today.isoweekday()))
+        weekday = today.isoweekday()
+
+        index = self._schedule_store.get_index(student_id)
+        if index is None:
+            return []
+
+        return index.get_courses_for_day(weekday, week_number)
 
     def get_week_courses(self, student_id: str, week_offset: int = 0) -> dict[str, list[Course]]:
         schedule = self.get_schedule(student_id)
@@ -132,18 +155,24 @@ class ScheduleService:
         target_week_number = self._calculate_week_number(schedule.semester_start, target_day)
         current_period = self._find_period(datetime.now().time())
 
+        index = self._schedule_store.get_index(user.student_id)
         current_course = None
-        if current_period is not None:
-            for course in self._iter_courses_for_day(schedule, today_week_number, today.isoweekday()):
-                if course.period_start <= current_period <= course.period_end:
-                    current_course = course
-                    break
+        today_courses = []
+
+        if index is not None:
+            if current_period is not None:
+                course = index.find_course_at_time(today.isoweekday(), current_period)
+                if course and self._course_matches_week(course, today_week_number):
+                    if course.period_start <= current_period <= course.period_end:
+                        current_course = course
+
+            today_courses = index.get_courses_for_day(today.isoweekday(), today_week_number)
 
         return DashboardOverview(
             user=user,
             schedule=schedule,
             current_course=current_course,
-            today_courses=list(self._iter_courses_for_day(schedule, today_week_number, today.isoweekday())),
+            today_courses=today_courses,
             week_courses=self._build_week_courses(schedule, target_week_number),
             week_offset=week_offset,
             has_schedule=True,
@@ -168,11 +197,12 @@ class ScheduleService:
             payload.prefer_playwright,
         )
 
-        Thread(
-            target=self._run_fetch_task,
-            args=(task.task_id, student_id, payload),
-            daemon=True,
-        ).start()
+        fetch_task = FetchTask(
+            task_id=task.task_id,
+            student_id=student_id,
+            handler=lambda: self._run_fetch_task(task.task_id, student_id, payload),
+        )
+        self._fetch_queue.submit(fetch_task)
         return task
 
     def get_fetch_task(self, task_id: str) -> FetchTaskStatus:
