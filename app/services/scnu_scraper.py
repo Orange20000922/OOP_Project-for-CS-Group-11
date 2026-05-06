@@ -25,7 +25,7 @@ from app.models.course import Course
 # 负责从华师教务系统抓取课表数据，支持两种方式：
 # 1. 逆向 JWXT API：模拟登录流程，调用课表 JSON接口，解析返回数据。速度快但可能随教务系统更新而失效。
 # 2. Playwright 自动化：通过 SSO 登录获取 session cookies，再调用课表接口。更稳定但需要额外安装 Playwright 依赖和浏览器。
-
+# 日志输出采用英文，防止可能的编码问题，并且更符合开发习惯。错误信息会抛出 RuntimeError，供上层调用者捕获并转换为用户友好的提示。
 class SCNUScraper:
     def __init__(self, base_url: str = SCNU_JWXT_BASE) -> None:
         self.base_url = base_url.rstrip("/")
@@ -232,7 +232,7 @@ class SCNUScraper:
     def parse_pdf_schedule(self, content: bytes) -> list[Course]:
         try:
             import pdfplumber
-        except ImportError as exc:  # pragma: no cover
+        except ImportError as exc:  
             logger.error("pdfplumber dependency missing while parsing PDF schedule")
             raise RuntimeError("缺少 pdfplumber，无法解析 PDF 课表") from exc
 

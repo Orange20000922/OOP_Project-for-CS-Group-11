@@ -11,8 +11,6 @@ from app.models.course import Course
 
 
 class ScheduleIndex:
-    """单个学生的课表索引"""
-
     def __init__(self):
         # 双向链表：按 (weekday, period_start) 排序存储所有课程
         self.courses_list = DoublyLinkedList()
