@@ -103,10 +103,6 @@
             "text-valign": "bottom",
             "text-margin-y": 9,
             "overlay-opacity": 0,
-            "shadow-blur": 18,
-            "shadow-color": "rgba(0,0,0,0.16)",
-            "shadow-offset-y": 10,
-            "shadow-opacity": 0.16,
           },
         },
         {
@@ -124,9 +120,6 @@
           style: {
             "border-width": 4,
             "border-color": "#f4c27f",
-            "shadow-color": "rgba(244, 194, 127, 0.56)",
-            "shadow-opacity": 0.42,
-            "shadow-blur": 22,
           },
         },
         {

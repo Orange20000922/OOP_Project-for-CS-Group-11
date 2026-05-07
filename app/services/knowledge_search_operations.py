@@ -486,7 +486,7 @@ class KnowledgeSearchOperations:
             truncated=truncated,
         )
         logger.info(
-            "Built knowledge graph for  with {} nodes and {} links (course_id={}, top_k={}, min_score={}, selected_topics={})",
+            "Built knowledge graph for {} with {} nodes and {} links (course_id={}, top_k={}, min_score={}, selected_topics={})",
             student_id,
             graph.total_nodes,
             graph.total_links,
