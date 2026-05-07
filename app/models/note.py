@@ -43,6 +43,7 @@ class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=1024)
     limit: int = Field(default=10, ge=1, le=50)
     course_id: str | None = Field(default=None, max_length=64)
+    topic_id: str | None = Field(default=None, max_length=64)
 
 
 class SearchResult(BaseModel):
@@ -54,6 +55,7 @@ class SearchResult(BaseModel):
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=1024)
     course_id: str | None = Field(default=None, max_length=64)
+    topic_id: str | None = Field(default=None, max_length=64)
 
 
 class AskResponse(BaseModel):

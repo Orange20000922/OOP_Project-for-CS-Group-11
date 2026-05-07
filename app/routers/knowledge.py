@@ -23,7 +23,7 @@ async def search_knowledge(
     student_id = _require_student_id(session_token)
 
     try:
-        return knowledge_service.search(student_id, body.query, body.limit, course_id=body.course_id)
+        return knowledge_service.search(student_id, body.query, body.limit, course_id=body.course_id, topic_id=body.topic_id)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -36,7 +36,7 @@ async def ask_knowledge(
     student_id = _require_student_id(session_token)
 
     try:
-        answer, sources = knowledge_service.ask(student_id, body.question, course_id=body.course_id)
+        answer, sources = knowledge_service.ask(student_id, body.question, course_id=body.course_id, topic_id=body.topic_id)
         return {
             "answer": answer,
             "sources": sources,

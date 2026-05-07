@@ -1023,6 +1023,7 @@
             body: JSON.stringify({
               question: question,
               course_id: this.courseId || null,
+              topic_id: this.activeTopicId || null,
             }),
           });
 
@@ -1051,6 +1052,7 @@
               query: query,
               limit: this.searchLimit,
               course_id: this.courseId || null,
+              topic_id: this.activeTopicId || null,
             }),
           });
 
