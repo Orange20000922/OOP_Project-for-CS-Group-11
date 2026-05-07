@@ -54,11 +54,16 @@ class KnowledgeService:
         try:
             close_fn()
             logger.info("Closed {}", label)
+        except (ImportError, AttributeError):
+            pass
         except Exception as exc:
             logger.warning("Failed to close {}: {}", label, exc)
 
     def close(self) -> None:
-        self._close_resource(self._memory, "chunk memory")
+        try:
+            self._close_resource(self._memory, "chunk memory")
+        except (ImportError, AttributeError):
+            pass
         self._memory = None
 
         topic_store = self._topic_store
@@ -67,6 +72,8 @@ class KnowledgeService:
             try:
                 topic_store.close()
                 logger.info("Closed topic vector store")
+            except (ImportError, AttributeError):
+                pass
             except Exception as exc:
                 logger.warning("Failed to close topic vector store: {}", exc)
 
